@@ -1,0 +1,801 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+// ============================================================
+// SECTION 1: AUTH & USER MANAGEMENT
+// ============================================================
+
+model Role {
+  id          BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  name        String   @unique @db.VarChar(50)
+  description String?  @db.VarChar(255)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  users User[]
+
+  @@map("roles")
+}
+
+model User {
+  id            BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  roleId        BigInt    @map("role_id") @db.UnsignedBigInt
+  email         String    @unique @db.VarChar(255)
+  passwordHash  String    @map("password_hash") @db.VarChar(255)
+  firstName     String    @map("first_name") @db.VarChar(100)
+  lastName      String    @map("last_name") @db.VarChar(100)
+  isCoachMode   Boolean   @default(false) @map("is_coach_mode")
+  isActive      Boolean   @default(true) @map("is_active")
+  emailVerified Boolean   @default(false) @map("email_verified")
+  lastLoginAt   DateTime? @map("last_login_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  role    Role         @relation(fields: [roleId], references: [id])
+  profile UserProfile?
+
+  coachAssignmentsAsCoach CoachAssignment[] @relation("CoachRelation")
+  coachAssignmentsAsUser  CoachAssignment[] @relation("UserRelation")
+
+  userEquipment           UserEquipment[]
+  userMusclePriorities    UserMusclePriority[]
+  workoutPlans            WorkoutPlan[]           @relation("PlanOwner")
+  workoutPlansCreated     WorkoutPlan[]           @relation("PlanCreator")
+  workoutSessions         WorkoutSession[]
+  progressionSettings     ProgressionSetting?
+  progressionHistory      ProgressionHistory[]
+  egoLiftAlerts           EgoLiftAlert[]
+  nutritionRecommendations NutritionRecommendation[] @relation("NutritionOwner")
+  nutritionRecsCreated    NutritionRecommendation[]  @relation("NutritionCreator")
+  dailyNutritionLogs      DailyNutritionLog[]
+  bodyWeightLogs          BodyWeightLog[]
+  nutritionAdjustments    NutritionAdjustment[]
+  kpiSnapshots            KpiSnapshot[]
+  userMilestones          UserMilestone[]
+  personalRecords         PersonalRecord[]
+  notifications           Notification[]
+  notificationPreferences NotificationPreference[]
+  coachOverridesAsCoach   CoachOverride[] @relation("OverrideCoach")
+  coachOverridesAsUser    CoachOverride[] @relation("OverrideUser")
+
+  @@map("users")
+}
+
+model UserProfile {
+  id                   BigInt              @id @default(autoincrement()) @db.UnsignedBigInt
+  userId               BigInt              @unique @map("user_id") @db.UnsignedBigInt
+  heightCm             Decimal?            @map("height_cm") @db.Decimal(5, 1)
+  weightKg             Decimal?            @map("weight_kg") @db.Decimal(5, 1)
+  age                  Int?                @db.UnsignedTinyInt
+  gender               UserProfile_gender?
+  fitnessGoal          UserProfile_fitnessGoal? @map("fitness_goal")
+  activityLevel        UserProfile_activityLevel? @map("activity_level")
+  trainingMethod       UserProfile_trainingMethod @default(hybrid) @map("training_method")
+  trainingDaysPerWeek  Int                 @default(3) @map("training_days_per_week") @db.UnsignedTinyInt
+  createdAt            DateTime            @default(now()) @map("created_at")
+  updatedAt            DateTime            @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_profiles")
+}
+
+enum UserProfile_gender {
+  male
+  female
+  other
+}
+
+enum UserProfile_fitnessGoal {
+  lose_weight
+  gain_muscle
+  maintain
+}
+
+enum UserProfile_activityLevel {
+  sedentary
+  lightly_active
+  moderately_active
+  very_active
+  extra_active
+}
+
+enum UserProfile_trainingMethod {
+  weight_training
+  bodyweight
+  hybrid
+}
+
+// ============================================================
+// SECTION 2: COACH MANAGEMENT
+// ============================================================
+
+model CoachAssignment {
+  id         BigInt                    @id @default(autoincrement()) @db.UnsignedBigInt
+  coachId    BigInt                    @map("coach_id") @db.UnsignedBigInt
+  userId     BigInt                    @map("user_id") @db.UnsignedBigInt
+  status     CoachAssignment_status    @default(active)
+  assignedAt DateTime                  @default(now()) @map("assigned_at")
+  endedAt    DateTime?                 @map("ended_at")
+  createdAt  DateTime                  @default(now()) @map("created_at")
+  updatedAt  DateTime                  @updatedAt @map("updated_at")
+
+  coach User @relation("CoachRelation", fields: [coachId], references: [id])
+  user  User @relation("UserRelation", fields: [userId], references: [id])
+
+  @@unique([coachId, userId, status], name: "uq_coach_assignments_active")
+  @@map("coach_assignments")
+}
+
+enum CoachAssignment_status {
+  active
+  paused
+  ended
+}
+
+// ============================================================
+// SECTION 3: EQUIPMENT
+// ============================================================
+
+model Equipment {
+  id          BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  name        String   @unique @db.VarChar(100)
+  description String?  @db.VarChar(255)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  userEquipment     UserEquipment[]
+  exerciseEquipment ExerciseEquipment[]
+
+  @@map("equipment")
+}
+
+model UserEquipment {
+  id          BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  userId      BigInt   @map("user_id") @db.UnsignedBigInt
+  equipmentId BigInt   @map("equipment_id") @db.UnsignedBigInt
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  equipment Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, equipmentId])
+  @@map("user_equipment")
+}
+
+// ============================================================
+// SECTION 4: MUSCLE GROUPS & EXERCISES
+// ============================================================
+
+model MuscleGroup {
+  id         BigInt                  @id @default(autoincrement()) @db.UnsignedBigInt
+  name       String                  @unique @db.VarChar(100)
+  bodyRegion MuscleGroup_bodyRegion  @map("body_region")
+  createdAt  DateTime                @default(now()) @map("created_at")
+
+  exerciseMuscles      ExerciseMuscle[]
+  userMusclePriorities UserMusclePriority[]
+
+  @@map("muscle_groups")
+}
+
+enum MuscleGroup_bodyRegion {
+  upper_body
+  lower_body
+  core
+  full_body
+}
+
+model Exercise {
+  id            BigInt                @id @default(autoincrement()) @db.UnsignedBigInt
+  name          String                @unique @db.VarChar(150)
+  description   String?               @db.Text
+  category      Exercise_category     @default(compound)
+  difficulty    Exercise_difficulty   @default(beginner)
+  isBodyweight  Boolean               @default(false) @map("is_bodyweight")
+  createdAt     DateTime              @default(now()) @map("created_at")
+  updatedAt     DateTime              @updatedAt @map("updated_at")
+
+  exerciseMuscles      ExerciseMuscle[]
+  exerciseEquipment    ExerciseEquipment[]
+  workoutPlanExercises WorkoutPlanExercise[]
+  workoutSets          WorkoutSet[]
+  progressionHistory   ProgressionHistory[]
+  egoLiftAlerts        EgoLiftAlert[]
+  personalRecords      PersonalRecord[]
+
+  @@map("exercises")
+}
+
+enum Exercise_category {
+  compound
+  isolation
+  cardio
+  flexibility
+}
+
+enum Exercise_difficulty {
+  beginner
+  intermediate
+  advanced
+}
+
+model ExerciseMuscle {
+  id            BigInt               @id @default(autoincrement()) @db.UnsignedBigInt
+  exerciseId    BigInt               @map("exercise_id") @db.UnsignedBigInt
+  muscleGroupId BigInt               @map("muscle_group_id") @db.UnsignedBigInt
+  role          ExerciseMuscle_role  @default(primary)
+
+  exercise    Exercise    @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  muscleGroup MuscleGroup @relation(fields: [muscleGroupId], references: [id], onDelete: Cascade)
+
+  @@unique([exerciseId, muscleGroupId])
+  @@index([muscleGroupId])
+  @@map("exercise_muscles")
+}
+
+enum ExerciseMuscle_role {
+  primary
+  secondary
+}
+
+model ExerciseEquipment {
+  id          BigInt @id @default(autoincrement()) @db.UnsignedBigInt
+  exerciseId  BigInt @map("exercise_id") @db.UnsignedBigInt
+  equipmentId BigInt @map("equipment_id") @db.UnsignedBigInt
+
+  exercise  Exercise  @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  equipment Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+
+  @@unique([exerciseId, equipmentId])
+  @@index([equipmentId])
+  @@map("exercise_equipment")
+}
+
+// ============================================================
+// SECTION 5: MUSCLE PRIORITIZATION
+// ============================================================
+
+model UserMusclePriority {
+  id            BigInt                        @id @default(autoincrement()) @db.UnsignedBigInt
+  userId        BigInt                        @map("user_id") @db.UnsignedBigInt
+  muscleGroupId BigInt                        @map("muscle_group_id") @db.UnsignedBigInt
+  priorityLevel UserMusclePriority_level      @default(normal) @map("priority_level")
+  hasImbalance  Boolean                       @default(false) @map("has_imbalance")
+  notes         String?                       @db.VarChar(500)
+  createdAt     DateTime                      @default(now()) @map("created_at")
+  updatedAt     DateTime                      @updatedAt @map("updated_at")
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  muscleGroup MuscleGroup @relation(fields: [muscleGroupId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, muscleGroupId])
+  @@map("user_muscle_priorities")
+}
+
+enum UserMusclePriority_level {
+  low
+  normal
+  high
+}
+
+// ============================================================
+// SECTION 6: WORKOUT PLANS
+// ============================================================
+
+model WorkoutPlan {
+  id            BigInt                   @id @default(autoincrement()) @db.UnsignedBigInt
+  userId        BigInt                   @map("user_id") @db.UnsignedBigInt
+  createdBy     BigInt?                  @map("created_by") @db.UnsignedBigInt
+  name          String                   @db.VarChar(200)
+  description   String?                  @db.Text
+  trainingGoal  WorkoutPlan_trainingGoal @default(general) @map("training_goal")
+  daysPerWeek   Int                      @default(3) @map("days_per_week") @db.UnsignedTinyInt
+  durationWeeks Int?                     @map("duration_weeks") @db.UnsignedTinyInt
+  isActive      Boolean                  @default(true) @map("is_active")
+  source        WorkoutPlan_source       @default(system)
+  startedAt     DateTime?                @map("started_at") @db.Date
+  endedAt       DateTime?                @map("ended_at") @db.Date
+  createdAt     DateTime                 @default(now()) @map("created_at")
+  updatedAt     DateTime                 @updatedAt @map("updated_at")
+
+  user      User  @relation("PlanOwner", fields: [userId], references: [id], onDelete: Cascade)
+  creator   User? @relation("PlanCreator", fields: [createdBy], references: [id], onDelete: SetNull)
+
+  days WorkoutPlanDay[]
+
+  @@index([userId])
+  @@map("workout_plans")
+}
+
+enum WorkoutPlan_trainingGoal {
+  strength
+  hypertrophy
+  endurance
+  general
+}
+
+enum WorkoutPlan_source {
+  system
+  coach
+  user
+}
+
+model WorkoutPlanDay {
+  id            BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  workoutPlanId BigInt   @map("workout_plan_id") @db.UnsignedBigInt
+  dayNumber     Int      @map("day_number") @db.UnsignedTinyInt
+  name          String?  @db.VarChar(100)
+  isRestDay     Boolean  @default(false) @map("is_rest_day")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  workoutPlan WorkoutPlan @relation(fields: [workoutPlanId], references: [id], onDelete: Cascade)
+
+  exercises       WorkoutPlanExercise[]
+  workoutSessions WorkoutSession[]
+
+  @@unique([workoutPlanId, dayNumber])
+  @@map("workout_plan_days")
+}
+
+model WorkoutPlanExercise {
+  id               BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  workoutPlanDayId BigInt   @map("workout_plan_day_id") @db.UnsignedBigInt
+  exerciseId       BigInt   @map("exercise_id") @db.UnsignedBigInt
+  sortOrder        Int      @default(1) @map("sort_order") @db.UnsignedTinyInt
+  targetSets       Int      @default(3) @map("target_sets") @db.UnsignedTinyInt
+  targetRepsMin    Int      @default(8) @map("target_reps_min") @db.UnsignedTinyInt
+  targetRepsMax    Int      @default(12) @map("target_reps_max") @db.UnsignedTinyInt
+  targetWeightKg   Decimal? @map("target_weight_kg") @db.Decimal(6, 2)
+  targetRpe        Decimal? @map("target_rpe") @db.Decimal(3, 1)
+  restSeconds      Int      @default(90) @map("rest_seconds") @db.UnsignedSmallInt
+  notes            String?  @db.VarChar(500)
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  workoutPlanDay WorkoutPlanDay @relation(fields: [workoutPlanDayId], references: [id], onDelete: Cascade)
+  exercise       Exercise       @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+
+  @@index([workoutPlanDayId])
+  @@map("workout_plan_exercises")
+}
+
+// ============================================================
+// SECTION 7: WORKOUT LOGGING
+// ============================================================
+
+model WorkoutSession {
+  id               BigInt                  @id @default(autoincrement()) @db.UnsignedBigInt
+  userId           BigInt                  @map("user_id") @db.UnsignedBigInt
+  workoutPlanDayId BigInt?                 @map("workout_plan_day_id") @db.UnsignedBigInt
+  status           WorkoutSession_status   @default(in_progress)
+  startedAt        DateTime                @default(now()) @map("started_at")
+  completedAt      DateTime?               @map("completed_at")
+  durationMinutes  Int?                    @map("duration_minutes") @db.UnsignedSmallInt
+  notes            String?                 @db.Text
+  createdAt        DateTime                @default(now()) @map("created_at")
+  updatedAt        DateTime                @updatedAt @map("updated_at")
+
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workoutPlanDay WorkoutPlanDay? @relation(fields: [workoutPlanDayId], references: [id], onDelete: SetNull)
+
+  sets WorkoutSet[]
+
+  @@index([userId])
+  @@index([startedAt])
+  @@map("workout_sessions")
+}
+
+enum WorkoutSession_status {
+  in_progress
+  completed
+  skipped
+}
+
+model WorkoutSet {
+  id               BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  workoutSessionId BigInt   @map("workout_session_id") @db.UnsignedBigInt
+  exerciseId       BigInt   @map("exercise_id") @db.UnsignedBigInt
+  setNumber        Int      @map("set_number") @db.UnsignedTinyInt
+  reps             Int      @db.UnsignedTinyInt
+  weightKg         Decimal? @map("weight_kg") @db.Decimal(6, 2)
+  rpe              Decimal? @db.Decimal(3, 1)
+  isWarmup         Boolean  @default(false) @map("is_warmup")
+  notes            String?  @db.VarChar(500)
+  performedAt      DateTime @default(now()) @map("performed_at")
+
+  workoutSession WorkoutSession @relation(fields: [workoutSessionId], references: [id], onDelete: Cascade)
+  exercise       Exercise       @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+
+  egoLiftAlerts   EgoLiftAlert[]
+  personalRecords PersonalRecord[]
+
+  @@index([workoutSessionId])
+  @@index([exerciseId])
+  @@map("workout_sets")
+}
+
+// ============================================================
+// SECTION 8: SMART PROGRESSIVE TRACKING
+// ============================================================
+
+model ProgressionSetting {
+  id                    BigInt                              @id @default(autoincrement()) @db.UnsignedBigInt
+  userId                BigInt                              @unique @map("user_id") @db.UnsignedBigInt
+  isEnabled             Boolean                             @default(true) @map("is_enabled")
+  progressionFrequency  ProgressionSetting_frequency        @default(weekly) @map("progression_frequency")
+  trainingGoal          ProgressionSetting_trainingGoal     @default(hypertrophy) @map("training_goal")
+  weightIncrementKg     Decimal                             @default(2.50) @map("weight_increment_kg") @db.Decimal(4, 2)
+  maxRepsBeforeIncrease Int                                 @default(12) @map("max_reps_before_increase") @db.UnsignedTinyInt
+  createdAt             DateTime                            @default(now()) @map("created_at")
+  updatedAt             DateTime                            @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("progression_settings")
+}
+
+enum ProgressionSetting_frequency {
+  weekly
+  biweekly
+  monthly
+}
+
+enum ProgressionSetting_trainingGoal {
+  strength
+  hypertrophy
+  endurance
+}
+
+model ProgressionHistory {
+  id             BigInt                            @id @default(autoincrement()) @db.UnsignedBigInt
+  userId         BigInt                            @map("user_id") @db.UnsignedBigInt
+  exerciseId     BigInt                            @map("exercise_id") @db.UnsignedBigInt
+  adjustmentType ProgressionHistory_adjustmentType @map("adjustment_type")
+  previousValue  Decimal                           @map("previous_value") @db.Decimal(6, 2)
+  newValue       Decimal                           @map("new_value") @db.Decimal(6, 2)
+  reason         String?                           @db.VarChar(500)
+  source         ProgressionHistory_source         @default(system)
+  createdAt      DateTime                          @default(now()) @map("created_at")
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  exercise Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([exerciseId])
+  @@map("progression_history")
+}
+
+enum ProgressionHistory_adjustmentType {
+  weight_increase
+  weight_decrease
+  reps_increase
+  sets_increase
+  deload
+}
+
+enum ProgressionHistory_source {
+  system
+  coach
+}
+
+// ============================================================
+// SECTION 9: SMART EGO-LIFT DETECTION
+// ============================================================
+
+model EgoLiftAlert {
+  id               BigInt                     @id @default(autoincrement()) @db.UnsignedBigInt
+  userId           BigInt                     @map("user_id") @db.UnsignedBigInt
+  exerciseId       BigInt                     @map("exercise_id") @db.UnsignedBigInt
+  workoutSetId     BigInt?                    @map("workout_set_id") @db.UnsignedBigInt
+  severity         EgoLiftAlert_severity      @default(warning)
+  message          String                     @db.VarChar(500)
+  previousWeightKg Decimal                    @map("previous_weight_kg") @db.Decimal(6, 2)
+  flaggedWeightKg  Decimal                    @map("flagged_weight_kg") @db.Decimal(6, 2)
+  previousReps     Int                        @map("previous_reps") @db.UnsignedTinyInt
+  flaggedReps      Int                        @map("flagged_reps") @db.UnsignedTinyInt
+  trainingGoal     EgoLiftAlert_trainingGoal  @map("training_goal")
+  isDismissed      Boolean                    @default(false) @map("is_dismissed")
+  createdAt        DateTime                   @default(now()) @map("created_at")
+
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  exercise   Exercise    @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  workoutSet WorkoutSet? @relation(fields: [workoutSetId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@map("ego_lift_alerts")
+}
+
+enum EgoLiftAlert_severity {
+  info
+  warning
+  critical
+}
+
+enum EgoLiftAlert_trainingGoal {
+  strength
+  hypertrophy
+  endurance
+}
+
+// ============================================================
+// SECTION 10: NUTRITION
+// ============================================================
+
+model NutritionRecommendation {
+  id               BigInt                          @id @default(autoincrement()) @db.UnsignedBigInt
+  userId           BigInt                          @map("user_id") @db.UnsignedBigInt
+  source           NutritionRecommendation_source  @default(system)
+  createdBy        BigInt?                         @map("created_by") @db.UnsignedBigInt
+  dailyCaloriesKcal Int                            @map("daily_calories_kcal") @db.UnsignedSmallInt
+  proteinG         Int                             @map("protein_g") @db.UnsignedSmallInt
+  carbohydratesG   Int                             @map("carbohydrates_g") @db.UnsignedSmallInt
+  fatsG            Int                             @map("fats_g") @db.UnsignedSmallInt
+  isActive         Boolean                         @default(true) @map("is_active")
+  effectiveFrom    DateTime                        @map("effective_from") @db.Date
+  effectiveTo      DateTime?                       @map("effective_to") @db.Date
+  notes            String?                         @db.VarChar(500)
+  createdAt        DateTime                        @default(now()) @map("created_at")
+  updatedAt        DateTime                        @updatedAt @map("updated_at")
+
+  user    User  @relation("NutritionOwner", fields: [userId], references: [id], onDelete: Cascade)
+  creator User? @relation("NutritionCreator", fields: [createdBy], references: [id], onDelete: SetNull)
+
+  nutritionAdjustments NutritionAdjustment[]
+
+  @@index([userId])
+  @@map("nutrition_recommendations")
+}
+
+enum NutritionRecommendation_source {
+  system
+  coach
+}
+
+model DailyNutritionLog {
+  id               BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  userId           BigInt   @map("user_id") @db.UnsignedBigInt
+  logDate          DateTime @map("log_date") @db.Date
+  totalCaloriesKcal Int?    @map("total_calories_kcal") @db.UnsignedSmallInt
+  proteinG         Int?     @map("protein_g") @db.UnsignedSmallInt
+  carbohydratesG   Int?     @map("carbohydrates_g") @db.UnsignedSmallInt
+  fatsG            Int?     @map("fats_g") @db.UnsignedSmallInt
+  notes            String?  @db.VarChar(500)
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, logDate])
+  @@map("daily_nutrition_logs")
+}
+
+// ============================================================
+// SECTION 11: BODY WEIGHT TRACKING
+// ============================================================
+
+model BodyWeightLog {
+  id        BigInt                @id @default(autoincrement()) @db.UnsignedBigInt
+  userId    BigInt                @map("user_id") @db.UnsignedBigInt
+  logDate   DateTime              @map("log_date") @db.Date
+  weightKg  Decimal               @map("weight_kg") @db.Decimal(5, 1)
+  source    BodyWeightLog_source  @default(manual)
+  createdAt DateTime              @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, logDate])
+  @@index([userId, logDate])
+  @@map("body_weight_logs")
+}
+
+enum BodyWeightLog_source {
+  manual
+  smart_scale
+  coach
+}
+
+model NutritionAdjustment {
+  id                        BigInt                          @id @default(autoincrement()) @db.UnsignedBigInt
+  userId                    BigInt                          @map("user_id") @db.UnsignedBigInt
+  nutritionRecommendationId BigInt                          @map("nutrition_recommendation_id") @db.UnsignedBigInt
+  triggerReason             NutritionAdjustment_trigger     @map("trigger_reason")
+  previousCaloriesKcal      Int                             @map("previous_calories_kcal") @db.UnsignedSmallInt
+  newCaloriesKcal           Int                             @map("new_calories_kcal") @db.UnsignedSmallInt
+  previousProteinG          Int?                            @map("previous_protein_g") @db.UnsignedSmallInt
+  newProteinG               Int?                            @map("new_protein_g") @db.UnsignedSmallInt
+  previousCarbohydratesG    Int?                            @map("previous_carbohydrates_g") @db.UnsignedSmallInt
+  newCarbohydratesG         Int?                            @map("new_carbohydrates_g") @db.UnsignedSmallInt
+  previousFatsG             Int?                            @map("previous_fats_g") @db.UnsignedSmallInt
+  newFatsG                  Int?                            @map("new_fats_g") @db.UnsignedSmallInt
+  weeklyAvgWeightKg         Decimal?                        @map("weekly_avg_weight_kg") @db.Decimal(5, 1)
+  notes                     String?                         @db.VarChar(500)
+  source                    NutritionAdjustment_source      @default(system)
+  createdAt                 DateTime                        @default(now()) @map("created_at")
+
+  user                    User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  nutritionRecommendation NutritionRecommendation @relation(fields: [nutritionRecommendationId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("nutrition_adjustments")
+}
+
+enum NutritionAdjustment_trigger {
+  plateau_detected
+  weight_trend
+  goal_change
+  coach_override
+}
+
+enum NutritionAdjustment_source {
+  system
+  coach
+}
+
+// ============================================================
+// SECTION 12: DASHBOARD — KPI SNAPSHOTS & MILESTONES
+// ============================================================
+
+model KpiSnapshot {
+  id                   BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  userId               BigInt   @map("user_id") @db.UnsignedBigInt
+  snapshotDate         DateTime @map("snapshot_date") @db.Date
+  bodyWeightKg         Decimal? @map("body_weight_kg") @db.Decimal(5, 1)
+  totalSessionsWeek    Int?     @map("total_sessions_week") @db.UnsignedTinyInt
+  plannedSessionsWeek  Int?     @map("planned_sessions_week") @db.UnsignedTinyInt
+  consistencyScore     Decimal? @map("consistency_score") @db.Decimal(5, 2)
+  strengthIndex        Decimal? @map("strength_index") @db.Decimal(8, 2)
+  weeklyStreak         Int      @default(0) @map("weekly_streak") @db.UnsignedSmallInt
+  createdAt            DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, snapshotDate])
+  @@map("kpi_snapshots")
+}
+
+model Milestone {
+  id           BigInt              @id @default(autoincrement()) @db.UnsignedBigInt
+  name         String              @unique @db.VarChar(150)
+  description  String?             @db.VarChar(500)
+  category     Milestone_category
+  criteriaJson Json?               @map("criteria_json")
+  iconUrl      String?             @map("icon_url") @db.VarChar(500)
+  createdAt    DateTime            @default(now()) @map("created_at")
+
+  userMilestones UserMilestone[]
+
+  @@map("milestones")
+}
+
+enum Milestone_category {
+  strength
+  consistency
+  weight
+  nutrition
+  general
+}
+
+model UserMilestone {
+  id          BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  userId      BigInt   @map("user_id") @db.UnsignedBigInt
+  milestoneId BigInt   @map("milestone_id") @db.UnsignedBigInt
+  achievedAt  DateTime @default(now()) @map("achieved_at")
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  milestone Milestone @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, milestoneId])
+  @@map("user_milestones")
+}
+
+// ============================================================
+// SECTION 13: PERSONAL RECORDS
+// ============================================================
+
+model PersonalRecord {
+  id           BigInt                   @id @default(autoincrement()) @db.UnsignedBigInt
+  userId       BigInt                   @map("user_id") @db.UnsignedBigInt
+  exerciseId   BigInt                   @map("exercise_id") @db.UnsignedBigInt
+  recordType   PersonalRecord_type      @map("record_type")
+  value        Decimal                  @db.Decimal(8, 2)
+  achievedAt   DateTime                 @map("achieved_at") @db.Date
+  workoutSetId BigInt?                  @map("workout_set_id") @db.UnsignedBigInt
+  createdAt    DateTime                 @default(now()) @map("created_at")
+
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  exercise   Exercise    @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  workoutSet WorkoutSet? @relation(fields: [workoutSetId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, exerciseId, recordType])
+  @@map("personal_records")
+}
+
+enum PersonalRecord_type {
+  max_weight
+  max_reps
+  max_volume
+}
+
+// ============================================================
+// SECTION 14: NOTIFICATIONS & REMINDERS
+// ============================================================
+
+model Notification {
+  id            BigInt              @id @default(autoincrement()) @db.UnsignedBigInt
+  userId        BigInt              @map("user_id") @db.UnsignedBigInt
+  type          Notification_type
+  title         String              @db.VarChar(200)
+  message       String              @db.Text
+  referenceType String?             @map("reference_type") @db.VarChar(50)
+  referenceId   BigInt?             @map("reference_id") @db.UnsignedBigInt
+  isRead        Boolean             @default(false) @map("is_read")
+  readAt        DateTime?           @map("read_at")
+  scheduledAt   DateTime?           @map("scheduled_at")
+  createdAt     DateTime            @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+enum Notification_type {
+  workout_reminder
+  missed_session
+  nutrition_reminder
+  ego_lift_warning
+  progression_update
+  milestone
+  general
+}
+
+model NotificationPreference {
+  id        BigInt            @id @default(autoincrement()) @db.UnsignedBigInt
+  userId    BigInt            @map("user_id") @db.UnsignedBigInt
+  type      Notification_type
+  isEnabled Boolean           @default(true) @map("is_enabled")
+  createdAt DateTime          @default(now()) @map("created_at")
+  updatedAt DateTime          @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, type])
+  @@map("notification_preferences")
+}
+
+// ============================================================
+// SECTION 15: COACH OVERRIDES
+// ============================================================
+
+enum CoachOverride_type {
+  PLAN
+  EXERCISE
+  SET
+  PROGRESSION
+  NUTRITION
+}
+
+model CoachOverride {
+  id            BigInt                    @id @default(autoincrement()) @db.UnsignedBigInt
+  coachId       BigInt                    @map("coach_id") @db.UnsignedBigInt
+  userId        BigInt                    @map("user_id") @db.UnsignedBigInt
+  overrideType  CoachOverride_type        @map("override_type")
+  referenceType String                    @map("reference_type") @db.VarChar(50)
+  referenceId   BigInt                    @map("reference_id") @db.UnsignedBigInt
+  reason        String?                   @db.Text
+  createdAt     DateTime                  @default(now()) @map("created_at")
+
+  coach User @relation("OverrideCoach", fields: [coachId], references: [id])
+  user  User @relation("OverrideUser", fields: [userId], references: [id])
+
+  @@index([coachId])
+  @@index([userId])
+  @@map("coach_overrides")
+}

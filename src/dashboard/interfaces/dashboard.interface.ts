@@ -1,0 +1,6 @@
+// TODO: Define DashboardOverviewResponse (totalWorkouts, currentStreak, totalVolume, bodyWeight, etc.)
+// TODO: Define StrengthProgressResponse (exerciseId, exerciseName, dataPoints[])
+// TODO: Define WeightTrendResponse (dataPoints[], currentWeight, goalWeight)
+// TODO: Define WorkoutConsistencyResponse (weeklyData[], averagePerWeek)
+// TODO: Define NutritionAdherenceResponse (dailyData[], adherencePercent)
+// TODO: Define KpiSnapshotResponse (id, snapshotDate, metrics)
