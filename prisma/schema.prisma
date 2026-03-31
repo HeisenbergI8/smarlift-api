@@ -508,6 +508,7 @@ model EgoLiftAlert {
   workoutSet WorkoutSet? @relation(fields: [workoutSetId], references: [id], onDelete: SetNull)
 
   @@index([userId])
+  @@index([exerciseId])
   @@map("ego_lift_alerts")
 }
 
@@ -656,6 +657,7 @@ model KpiSnapshot {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, snapshotDate])
+  @@index([userId])
   @@map("kpi_snapshots")
 }
 
@@ -713,6 +715,8 @@ model PersonalRecord {
   workoutSet WorkoutSet? @relation(fields: [workoutSetId], references: [id], onDelete: SetNull)
 
   @@unique([userId, exerciseId, recordType])
+  @@index([userId])
+  @@index([workoutSetId])
   @@map("personal_records")
 }
 
