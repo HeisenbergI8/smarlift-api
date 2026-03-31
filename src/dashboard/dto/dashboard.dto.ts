@@ -1,1 +1,1 @@
-// TODO: Define CreateKpiSnapshotDto if manual snapshot creation needs a body
+// Dashboard DTOs are split into individual query DTO files

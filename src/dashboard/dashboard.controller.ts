@@ -1,7 +1,20 @@
-import { Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Query,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
 import { DashboardService } from './dashboard.service';
-import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { JwtAuthGuard, CurrentUser } from '../common';
+import {
+  GetWeightTrendQueryDto,
+  GetWorkoutConsistencyQueryDto,
+  GetNutritionAdherenceQueryDto,
+  GetKpiSnapshotsQueryDto,
+} from './dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller('dashboard')
@@ -10,49 +23,49 @@ export class DashboardController {
 
   @Get('overview')
   getOverview(@CurrentUser('id') userId: number) {
-    // TODO: Delegate to dashboardService.getOverview()
+    return this.dashboardService.getOverview(userId);
   }
 
   @Get('strength-progress')
   getStrengthProgress(@CurrentUser('id') userId: number) {
-    // TODO: Delegate to dashboardService.getStrengthProgress()
+    return this.dashboardService.getStrengthProgress(userId);
   }
 
   @Get('weight-trend')
   getWeightTrend(
     @CurrentUser('id') userId: number,
-    @Query('period') period: string,
+    @Query() query: GetWeightTrendQueryDto,
   ) {
-    // TODO: Delegate to dashboardService.getWeightTrend()
+    return this.dashboardService.getWeightTrend(userId, query.period);
   }
 
   @Get('workout-consistency')
   getWorkoutConsistency(
     @CurrentUser('id') userId: number,
-    @Query('weeks') weeks: number,
+    @Query() query: GetWorkoutConsistencyQueryDto,
   ) {
-    // TODO: Delegate to dashboardService.getWorkoutConsistency()
+    return this.dashboardService.getWorkoutConsistency(userId, query.weeks);
   }
 
   @Get('nutrition-adherence')
   getNutritionAdherence(
     @CurrentUser('id') userId: number,
-    @Query('days') days: number,
+    @Query() query: GetNutritionAdherenceQueryDto,
   ) {
-    // TODO: Delegate to dashboardService.getNutritionAdherence()
+    return this.dashboardService.getNutritionAdherence(userId, query.days);
   }
 
   @Get('kpi-snapshots')
   getKpiSnapshots(
     @CurrentUser('id') userId: number,
-    @Query('startDate') startDate: string,
-    @Query('endDate') endDate: string,
+    @Query() query: GetKpiSnapshotsQueryDto,
   ) {
-    // TODO: Delegate to dashboardService.getKpiSnapshots()
+    return this.dashboardService.getKpiSnapshots(userId, query);
   }
 
   @Post('kpi-snapshot')
+  @HttpCode(HttpStatus.OK)
   createKpiSnapshot(@CurrentUser('id') userId: number) {
-    // TODO: Delegate to dashboardService.createKpiSnapshot()
+    return this.dashboardService.createKpiSnapshot(userId);
   }
 }
