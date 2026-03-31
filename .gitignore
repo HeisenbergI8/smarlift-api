@@ -4,6 +4,18 @@ node_modules
 
 /generated/prisma
 
+# GitHub Copilot AI agent files, instructions, skills, prompts
+.github/
+
+# AI assistant / IDE config
+.copilot/
+.cursor/
+.aider*
+.codeium/
+.continue/
+.windsurf/
+copilot-skill:*
+
 # Project documentation / planning files
 ENGINEERING_GUIDE.md
 IMPLEMENTATION_CHUNKS.md
