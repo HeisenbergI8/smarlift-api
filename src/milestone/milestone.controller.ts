@@ -1,7 +1,13 @@
-import { Controller, Get, Post, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
 import { MilestoneService } from './milestone.service';
-import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { JwtAuthGuard, CurrentUser } from '../common';
 
 @UseGuards(JwtAuthGuard)
 @Controller('milestones')
@@ -10,16 +16,17 @@ export class MilestoneController {
 
   @Get()
   getAllMilestones() {
-    // TODO: Delegate to milestoneService.getAllMilestones()
+    return this.milestoneService.getAllMilestones();
   }
 
   @Get('me')
   getUserMilestones(@CurrentUser('id') userId: number) {
-    // TODO: Delegate to milestoneService.getUserMilestones()
+    return this.milestoneService.getUserMilestones(userId);
   }
 
   @Post('check')
+  @HttpCode(HttpStatus.OK)
   checkAndAward(@CurrentUser('id') userId: number) {
-    // TODO: Delegate to milestoneService.checkAndAwardMilestones()
+    return this.milestoneService.checkAndAwardMilestones(userId);
   }
 }
