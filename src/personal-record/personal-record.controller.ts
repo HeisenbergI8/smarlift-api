@@ -16,7 +16,7 @@ export class PersonalRecordController {
 
   @Get()
   getUserRecords(@CurrentUser('id') userId: number) {
-    // TODO: Delegate to personalRecordService.getUserRecords()
+    return this.personalRecordService.getUserRecords(userId);
   }
 
   @Get('exercise/:exerciseId')
@@ -24,6 +24,6 @@ export class PersonalRecordController {
     @CurrentUser('id') userId: number,
     @Param('exerciseId', ParseIntPipe) exerciseId: number,
   ) {
-    // TODO: Delegate to personalRecordService.getRecordsByExercise()
+    return this.personalRecordService.getRecordsByExercise(userId, exerciseId);
   }
 }

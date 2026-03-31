@@ -1,1 +1,2 @@
-// TODO: Define query DTOs if filtering is needed for personal records
+// No input DTOs required — personal records are read-only endpoints.
+// Records are created internally via evaluateAndUpdateRecords().
