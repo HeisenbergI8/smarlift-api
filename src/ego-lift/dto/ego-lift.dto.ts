@@ -1,1 +1,2 @@
-// TODO: Define query DTOs if filtering/pagination is needed for ego-lift alerts
+// No input DTOs required — ego-lift alerts are created internally by analyzeSet().
+// Query pagination is handled by the shared PaginationQueryDto.

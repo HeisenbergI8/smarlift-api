@@ -22,15 +22,16 @@ export class EgoLiftController {
     @CurrentUser('id') userId: number,
     @Query() query: PaginationQueryDto,
   ) {
-    // TODO: Delegate to egoLiftService.getAlerts()
+    return this.egoLiftService.getAlerts(userId, query);
   }
 
   @Get('exercise/:exerciseId')
   getAlertsByExercise(
     @CurrentUser('id') userId: number,
     @Param('exerciseId', ParseIntPipe) exerciseId: number,
+    @Query() query: PaginationQueryDto,
   ) {
-    // TODO: Delegate to egoLiftService.getAlertsByExercise()
+    return this.egoLiftService.getAlertsByExercise(userId, exerciseId, query);
   }
 
   @Patch(':id/dismiss')
@@ -38,6 +39,6 @@ export class EgoLiftController {
     @CurrentUser('id') userId: number,
     @Param('id', ParseIntPipe) alertId: number,
   ) {
-    // TODO: Delegate to egoLiftService.dismissAlert()
+    return this.egoLiftService.dismissAlert(userId, alertId);
   }
 }
