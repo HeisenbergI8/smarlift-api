@@ -9,6 +9,7 @@ import {
 export enum BodyWeightSource {
   MANUAL = 'manual',
   SMART_SCALE = 'smart_scale',
+  COACH = 'coach',
 }
 
 export class LogBodyWeightDto {
