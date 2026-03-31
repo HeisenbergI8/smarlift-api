@@ -1,4 +1,12 @@
-import { IsEnum, IsString, IsOptional } from 'class-validator';
+import {
+  IsEnum,
+  IsString,
+  IsOptional,
+  IsBoolean,
+  IsInt,
+  IsPositive,
+  MaxLength,
+} from 'class-validator';
 
 export enum NotificationType {
   WORKOUT_REMINDER = 'workout_reminder',
@@ -15,9 +23,11 @@ export class CreateNotificationDto {
   type: NotificationType;
 
   @IsString()
+  @MaxLength(200)
   title: string;
 
   @IsString()
+  @MaxLength(5000)
   message: string;
 
   @IsOptional()
@@ -25,6 +35,8 @@ export class CreateNotificationDto {
   referenceType?: string;
 
   @IsOptional()
+  @IsInt()
+  @IsPositive()
   referenceId?: number;
 }
 
@@ -32,5 +44,6 @@ export class UpdateNotificationPrefsDto {
   @IsEnum(NotificationType)
   type: NotificationType;
 
+  @IsBoolean()
   isEnabled: boolean;
 }

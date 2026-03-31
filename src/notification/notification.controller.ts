@@ -12,8 +12,7 @@ import {
 import { NotificationService } from './notification.service';
 import { UpdateNotificationPrefsDto } from './dto';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
-import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { JwtAuthGuard, CurrentUser } from '../common';
 
 @UseGuards(JwtAuthGuard)
 @Controller('notifications')
@@ -25,12 +24,12 @@ export class NotificationController {
     @CurrentUser('id') userId: number,
     @Query() query: PaginationQueryDto,
   ) {
-    // TODO: Delegate to notificationService.getNotifications()
+    return this.notificationService.getNotifications(userId, query);
   }
 
   @Get('unread-count')
   getUnreadCount(@CurrentUser('id') userId: number) {
-    // TODO: Delegate to notificationService.getUnreadCount()
+    return this.notificationService.getUnreadCount(userId);
   }
 
   @Patch(':id/read')
@@ -38,17 +37,17 @@ export class NotificationController {
     @CurrentUser('id') userId: number,
     @Param('id', ParseIntPipe) notificationId: number,
   ) {
-    // TODO: Delegate to notificationService.markAsRead()
+    return this.notificationService.markAsRead(userId, notificationId);
   }
 
   @Patch('read-all')
   markAllAsRead(@CurrentUser('id') userId: number) {
-    // TODO: Delegate to notificationService.markAllAsRead()
+    return this.notificationService.markAllAsRead(userId);
   }
 
   @Get('preferences')
   getPreferences(@CurrentUser('id') userId: number) {
-    // TODO: Delegate to notificationService.getPreferences()
+    return this.notificationService.getPreferences(userId);
   }
 
   @Put('preferences')
@@ -56,6 +55,6 @@ export class NotificationController {
     @CurrentUser('id') userId: number,
     @Body() dto: UpdateNotificationPrefsDto,
   ) {
-    // TODO: Delegate to notificationService.updatePreference()
+    return this.notificationService.updatePreference(userId, dto);
   }
 }
