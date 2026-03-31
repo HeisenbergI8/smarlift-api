@@ -5,6 +5,9 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { PersonalRecordService } from '../personal-record/personal-record.service';
+import { EgoLiftService } from '../ego-lift/ego-lift.service';
+import { MilestoneService } from '../milestone/milestone.service';
 import { StartSessionDto, LogSetDto, CompleteSessionDto } from './dto';
 
 const SESSION_SETS_INCLUDE = {
@@ -18,7 +21,12 @@ const SESSION_SETS_INCLUDE = {
 export class WorkoutLogService {
   private readonly logger = new Logger(WorkoutLogService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly personalRecordService: PersonalRecordService,
+    private readonly egoLiftService: EgoLiftService,
+    private readonly milestoneService: MilestoneService,
+  ) {}
 
   async startSession(userId: number, dto: StartSessionDto) {
     return this.prisma.workoutSession.create({
@@ -47,7 +55,7 @@ export class WorkoutLogService {
       );
     }
 
-    return this.prisma.workoutSet.create({
+    const newSet = await this.prisma.workoutSet.create({
       data: {
         workoutSessionId: BigInt(sessionId),
         exerciseId: BigInt(dto.exerciseId),
@@ -60,6 +68,49 @@ export class WorkoutLogService {
       },
       include: { exercise: true },
     });
+
+    if (!newSet.isWarmup) {
+      try {
+        await this.personalRecordService.evaluateAndUpdateRecords(userId, {
+          id: newSet.id,
+          exerciseId: newSet.exerciseId,
+          reps: newSet.reps,
+          weightKg: newSet.weightKg,
+          performedAt: newSet.performedAt,
+        });
+      } catch (error) {
+        this.logger.error(
+          `Failed to evaluate personal records for set ${newSet.id}`,
+          error instanceof Error ? error.stack : undefined,
+        );
+      }
+
+      try {
+        const settings = await this.prisma.progressionSetting.findUnique({
+          where: { userId: BigInt(userId) },
+        });
+        const trainingGoal = settings?.trainingGoal ?? 'hypertrophy';
+
+        await this.egoLiftService.analyzeSet(
+          userId,
+          {
+            id: newSet.id,
+            exerciseId: newSet.exerciseId,
+            workoutSessionId: newSet.workoutSessionId,
+            reps: newSet.reps,
+            weightKg: newSet.weightKg,
+          },
+          trainingGoal,
+        );
+      } catch (error) {
+        this.logger.error(
+          `Failed to analyze ego-lift for set ${newSet.id}`,
+          error instanceof Error ? error.stack : undefined,
+        );
+      }
+    }
+
+    return newSet;
   }
 
   async completeSession(
@@ -79,7 +130,7 @@ export class WorkoutLogService {
       (completedAt.getTime() - session.startedAt.getTime()) / 60_000,
     );
 
-    return this.prisma.workoutSession.update({
+    const updated = await this.prisma.workoutSession.update({
       where: { id: BigInt(sessionId) },
       data: {
         status: 'completed',
@@ -89,6 +140,17 @@ export class WorkoutLogService {
       },
       include: SESSION_SETS_INCLUDE,
     });
+
+    try {
+      await this.milestoneService.checkAndAwardMilestones(userId);
+    } catch (error) {
+      this.logger.error(
+        `Failed to check milestones for user ${userId}`,
+        error instanceof Error ? error.stack : undefined,
+      );
+    }
+
+    return updated;
   }
 
   async getSessionHistory(userId: number, page: number, limit: number) {
