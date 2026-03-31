@@ -4,6 +4,7 @@ import {
   IsString,
   IsDateString,
   Min,
+  MaxLength,
 } from 'class-validator';
 
 export class CreateNutritionRecDto {
@@ -32,6 +33,7 @@ export class CreateNutritionRecDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   notes?: string;
 }
 
@@ -61,5 +63,6 @@ export class LogDailyNutritionDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   notes?: string;
 }
