@@ -8,12 +8,13 @@ import {
   Body,
   ParseIntPipe,
   UseGuards,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
+import { JwtAuthGuard, CurrentUser } from '../common';
 import { ProgressionService } from './progression.service';
 import { UpdateProgressionSettingsDto } from './dto';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
-import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { CurrentUser } from '../common/decorators/current-user.decorator';
 
 @UseGuards(JwtAuthGuard)
 @Controller('progression')
@@ -22,7 +23,7 @@ export class ProgressionController {
 
   @Get('settings')
   getSettings(@CurrentUser('id') userId: number) {
-    // TODO: Delegate to progressionService.getSettings()
+    return this.progressionService.getSettings(userId);
   }
 
   @Put('settings')
@@ -30,7 +31,7 @@ export class ProgressionController {
     @CurrentUser('id') userId: number,
     @Body() dto: UpdateProgressionSettingsDto,
   ) {
-    // TODO: Delegate to progressionService.upsertSettings()
+    return this.progressionService.upsertSettings(userId, dto);
   }
 
   @Get('history')
@@ -38,19 +39,25 @@ export class ProgressionController {
     @CurrentUser('id') userId: number,
     @Query() query: PaginationQueryDto,
   ) {
-    // TODO: Delegate to progressionService.getHistory()
+    return this.progressionService.getHistory(userId, query);
   }
 
   @Get('history/exercise/:exerciseId')
   getHistoryByExercise(
     @CurrentUser('id') userId: number,
     @Param('exerciseId', ParseIntPipe) exerciseId: number,
+    @Query() query: PaginationQueryDto,
   ) {
-    // TODO: Delegate to progressionService.getHistoryByExercise()
+    return this.progressionService.getHistoryByExercise(
+      userId,
+      exerciseId,
+      query,
+    );
   }
 
   @Post('evaluate')
+  @HttpCode(HttpStatus.OK)
   evaluateProgression(@CurrentUser('id') userId: number) {
-    // TODO: Delegate to progressionService.evaluateProgression()
+    return this.progressionService.evaluateProgression(userId);
   }
 }
