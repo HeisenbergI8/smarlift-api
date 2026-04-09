@@ -22,7 +22,7 @@ export enum WorkoutTrainingGoal {
 
 export class CreatePlanExerciseDto {
   @IsInt()
-  exerciseId: number;
+  exerciseId!: number;
 
   @IsOptional()
   @IsInt()
@@ -66,7 +66,7 @@ export class CreatePlanExerciseDto {
 export class CreatePlanDayDto {
   @IsInt()
   @Min(1)
-  dayNumber: number;
+  dayNumber!: number;
 
   @IsOptional()
   @IsString()
@@ -85,7 +85,7 @@ export class CreatePlanDayDto {
 
 export class CreateWorkoutPlanDto {
   @IsString()
-  name: string;
+  name!: string;
 
   @IsOptional()
   @IsString()
