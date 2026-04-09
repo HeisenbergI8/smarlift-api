@@ -7,6 +7,7 @@ import {
   IsOptional,
   IsEnum,
 } from 'class-validator';
+import { Match } from '../../common';
 
 export enum AccountType {
   USER = 'user',
@@ -15,19 +16,23 @@ export enum AccountType {
 
 export class RegisterDto {
   @IsEmail()
-  email: string;
+  email!: string;
 
   @IsString()
   @MinLength(8)
-  password: string;
+  password!: string;
+
+  @IsString()
+  @Match('password')
+  confirmPassword!: string;
 
   @IsString()
   @IsNotEmpty()
-  firstName: string;
+  firstName!: string;
 
   @IsString()
   @IsNotEmpty()
-  lastName: string;
+  lastName!: string;
 
   @IsOptional()
   @IsBoolean()

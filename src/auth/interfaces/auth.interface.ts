@@ -1,3 +1,25 @@
-// TODO: Define AuthTokenResponse (accessToken, tokenType, expiresIn)
-// TODO: Define RegisterResponse (user id, email, message)
-// TODO: Define LoginResponse (user data + token)
+export interface AuthUserResponse {
+  id: number;
+  email: string;
+  firstName: string;
+  lastName: string;
+  isCoachMode: boolean;
+}
+
+export interface AuthResponse {
+  accessToken: string;
+  user: AuthUserResponse;
+}
+
+export interface MeResponse {
+  id: number;
+  email: string;
+  firstName: string;
+  lastName: string;
+  isCoachMode: boolean;
+  isActive: boolean;
+  emailVerified: boolean;
+  lastLoginAt: Date | null;
+  createdAt: Date;
+  role: string;
+}

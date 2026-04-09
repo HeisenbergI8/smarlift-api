@@ -2,6 +2,7 @@ import {
   Injectable,
   ConflictException,
   ForbiddenException,
+  NotFoundException,
   UnauthorizedException,
   InternalServerErrorException,
   Logger,
@@ -11,6 +12,7 @@ import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { RegisterDto, LoginDto } from './dto';
 import { AccountType } from './dto/register.dto';
+import { AuthResponse, MeResponse } from './interfaces/auth.interface';
 
 const BCRYPT_SALT_ROUNDS = 12;
 const ALLOWED_SELF_REGISTER_ROLES: readonly AccountType[] = [
@@ -27,7 +29,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
   ) {}
 
-  async register(dto: RegisterDto) {
+  async register(dto: RegisterDto): Promise<AuthResponse> {
     const existing = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
@@ -71,7 +73,7 @@ export class AuthService {
         Number(user.roleId),
       ),
       user: {
-        id: user.id,
+        id: Number(user.id),
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName,
@@ -80,7 +82,7 @@ export class AuthService {
     };
   }
 
-  async login(dto: LoginDto) {
+  async login(dto: LoginDto): Promise<AuthResponse> {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
       include: { role: true },
@@ -112,12 +114,36 @@ export class AuthService {
         Number(user.roleId),
       ),
       user: {
-        id: user.id,
+        id: Number(user.id),
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName,
         isCoachMode: user.isCoachMode,
       },
+    };
+  }
+
+  async getMe(userId: number): Promise<MeResponse> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: BigInt(userId) },
+      include: { role: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    return {
+      id: Number(user.id),
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      isCoachMode: user.isCoachMode,
+      isActive: user.isActive,
+      emailVerified: user.emailVerified,
+      lastLoginAt: user.lastLoginAt,
+      createdAt: user.createdAt,
+      role: user.role.name,
     };
   }
 
