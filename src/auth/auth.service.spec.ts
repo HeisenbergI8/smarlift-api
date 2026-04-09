@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import {
   ConflictException,
   ForbiddenException,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
@@ -47,6 +48,7 @@ describe('AuthService', () => {
     const registerDto = {
       email: 'test@example.com',
       password: 'password123',
+      confirmPassword: 'password123',
       firstName: 'John',
       lastName: 'Doe',
     };
@@ -175,6 +177,51 @@ describe('AuthService', () => {
         where: { id: mockUser.id },
         data: { lastLoginAt: expect.any(Date) },
       });
+    });
+  });
+
+  describe('getMe', () => {
+    const mockUser = {
+      id: BigInt(1),
+      email: 'test@example.com',
+      firstName: 'John',
+      lastName: 'Doe',
+      isCoachMode: false,
+      isActive: true,
+      emailVerified: false,
+      lastLoginAt: null,
+      createdAt: new Date('2026-01-01'),
+      role: { id: BigInt(1), name: 'user' },
+    };
+
+    it('should return user profile without passwordHash', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(mockUser);
+
+      const result = await service.getMe(1);
+
+      expect(result).toEqual({
+        id: 1,
+        email: 'test@example.com',
+        firstName: 'John',
+        lastName: 'Doe',
+        isCoachMode: false,
+        isActive: true,
+        emailVerified: false,
+        lastLoginAt: null,
+        createdAt: mockUser.createdAt,
+        role: 'user',
+      });
+      expect(result).not.toHaveProperty('passwordHash');
+      expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
+        where: { id: BigInt(1) },
+        include: { role: true },
+      });
+    });
+
+    it('should throw NotFoundException when user does not exist', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(null);
+
+      await expect(service.getMe(999)).rejects.toThrow(NotFoundException);
     });
   });
 });
