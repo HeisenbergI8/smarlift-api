@@ -12,6 +12,12 @@ import {
   CreateEquipmentDto,
   UpdateEquipmentDto,
 } from './dto';
+import {
+  EquipmentResponse,
+  UserEquipmentResponse,
+  PaginatedEquipmentResponse,
+  PaginatedUserEquipmentResponse,
+} from './interfaces';
 
 @Injectable()
 export class EquipmentService {
@@ -19,12 +25,49 @@ export class EquipmentService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(query: FindEquipmentQueryDto) {
+  private mapEquipment(raw: {
+    id: bigint;
+    name: string;
+    description: string | null;
+    createdAt: Date;
+  }): EquipmentResponse {
+    return {
+      id: Number(raw.id),
+      name: raw.name,
+      description: raw.description,
+      createdAt: raw.createdAt,
+    };
+  }
+
+  private mapUserEquipment(raw: {
+    id: bigint;
+    userId: bigint;
+    equipmentId: bigint;
+    createdAt: Date;
+    equipment: {
+      id: bigint;
+      name: string;
+      description: string | null;
+      createdAt: Date;
+    };
+  }): UserEquipmentResponse {
+    return {
+      id: Number(raw.id),
+      userId: Number(raw.userId),
+      equipmentId: Number(raw.equipmentId),
+      createdAt: raw.createdAt,
+      equipment: this.mapEquipment(raw.equipment),
+    };
+  }
+
+  async findAll(
+    query: FindEquipmentQueryDto,
+  ): Promise<PaginatedEquipmentResponse> {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const skip = (page - 1) * limit;
 
-    const [data, total] = await Promise.all([
+    const [raw, total] = await Promise.all([
       this.prisma.equipment.findMany({
         skip,
         take: limit,
@@ -33,16 +76,19 @@ export class EquipmentService {
       this.prisma.equipment.count(),
     ]);
 
-    return { data, total, page, limit };
+    return { data: raw.map((e) => this.mapEquipment(e)), total, page, limit };
   }
 
-  async getUserEquipment(userId: number, query: FindEquipmentQueryDto) {
+  async getUserEquipment(
+    userId: number,
+    query: FindEquipmentQueryDto,
+  ): Promise<PaginatedUserEquipmentResponse> {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const skip = (page - 1) * limit;
     const bigUserId = BigInt(userId);
 
-    const [data, total] = await Promise.all([
+    const [raw, total] = await Promise.all([
       this.prisma.userEquipment.findMany({
         where: { userId: bigUserId },
         include: { equipment: true },
@@ -53,10 +99,18 @@ export class EquipmentService {
       this.prisma.userEquipment.count({ where: { userId: bigUserId } }),
     ]);
 
-    return { data, total, page, limit };
+    return {
+      data: raw.map((e) => this.mapUserEquipment(e)),
+      total,
+      page,
+      limit,
+    };
   }
 
-  async syncUserEquipment(userId: number, dto: SyncEquipmentDto) {
+  async syncUserEquipment(
+    userId: number,
+    dto: SyncEquipmentDto,
+  ): Promise<PaginatedUserEquipmentResponse> {
     const found = await this.prisma.equipment.findMany({
       where: { id: { in: dto.equipmentIds.map((id) => BigInt(id)) } },
       select: { id: true },
@@ -85,9 +139,10 @@ export class EquipmentService {
     return this.getUserEquipment(userId, { page: 1, limit: 100 });
   }
 
-  async create(dto: CreateEquipmentDto) {
+  async create(dto: CreateEquipmentDto): Promise<EquipmentResponse> {
     try {
-      return await this.prisma.equipment.create({ data: dto });
+      const raw = await this.prisma.equipment.create({ data: dto });
+      return this.mapEquipment(raw);
     } catch (e: unknown) {
       if ((e as { code?: string }).code === 'P2002') {
         throw new ConflictException(`Equipment "${dto.name}" already exists`);
@@ -96,7 +151,10 @@ export class EquipmentService {
     }
   }
 
-  async update(id: number, dto: UpdateEquipmentDto) {
+  async update(
+    id: number,
+    dto: UpdateEquipmentDto,
+  ): Promise<EquipmentResponse> {
     const equipment = await this.prisma.equipment.findUnique({
       where: { id: BigInt(id) },
     });
@@ -105,10 +163,11 @@ export class EquipmentService {
     }
 
     try {
-      return await this.prisma.equipment.update({
+      const raw = await this.prisma.equipment.update({
         where: { id: BigInt(id) },
         data: dto,
       });
+      return this.mapEquipment(raw);
     } catch (e: unknown) {
       if ((e as { code?: string }).code === 'P2002') {
         throw new ConflictException(`Equipment "${dto.name}" already exists`);
@@ -117,7 +176,7 @@ export class EquipmentService {
     }
   }
 
-  async remove(id: number) {
+  async remove(id: number): Promise<void> {
     const equipment = await this.prisma.equipment.findUnique({
       where: { id: BigInt(id) },
     });
