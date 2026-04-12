@@ -11,6 +11,7 @@ import {
   CreateExerciseDto,
   UpdateExerciseDto,
 } from './dto';
+import { ExerciseResponse, PaginatedExerciseResponse } from './interfaces';
 
 @Injectable()
 export class ExerciseService {
@@ -18,7 +19,77 @@ export class ExerciseService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(query: FindExercisesQueryDto) {
+  private mapExercise(raw: {
+    id: bigint;
+    name: string;
+    description: string | null;
+    category: Exercise_category;
+    difficulty: Exercise_difficulty;
+    isBodyweight: boolean;
+    createdAt: Date;
+    updatedAt: Date;
+    exerciseMuscles: {
+      id: bigint;
+      exerciseId: bigint;
+      muscleGroupId: bigint;
+      role: import('@prisma/client').ExerciseMuscle_role;
+      muscleGroup: {
+        id: bigint;
+        name: string;
+        bodyRegion: import('@prisma/client').MuscleGroup_bodyRegion;
+        createdAt: Date;
+      };
+    }[];
+    exerciseEquipment: {
+      id: bigint;
+      exerciseId: bigint;
+      equipmentId: bigint;
+      equipment: {
+        id: bigint;
+        name: string;
+        description: string | null;
+        createdAt: Date;
+      };
+    }[];
+  }): ExerciseResponse {
+    return {
+      id: Number(raw.id),
+      name: raw.name,
+      description: raw.description,
+      category: raw.category,
+      difficulty: raw.difficulty,
+      isBodyweight: raw.isBodyweight,
+      createdAt: raw.createdAt,
+      updatedAt: raw.updatedAt,
+      exerciseMuscles: raw.exerciseMuscles.map((m) => ({
+        id: Number(m.id),
+        exerciseId: Number(m.exerciseId),
+        muscleGroupId: Number(m.muscleGroupId),
+        role: m.role,
+        muscleGroup: {
+          id: Number(m.muscleGroup.id),
+          name: m.muscleGroup.name,
+          bodyRegion: m.muscleGroup.bodyRegion,
+          createdAt: m.muscleGroup.createdAt,
+        },
+      })),
+      exerciseEquipment: raw.exerciseEquipment.map((e) => ({
+        id: Number(e.id),
+        exerciseId: Number(e.exerciseId),
+        equipmentId: Number(e.equipmentId),
+        equipment: {
+          id: Number(e.equipment.id),
+          name: e.equipment.name,
+          description: e.equipment.description,
+          createdAt: e.equipment.createdAt,
+        },
+      })),
+    };
+  }
+
+  async findAll(
+    query: FindExercisesQueryDto,
+  ): Promise<PaginatedExerciseResponse> {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const skip = (page - 1) * limit;
@@ -45,7 +116,7 @@ export class ExerciseService {
       };
     }
 
-    const [data, total] = await Promise.all([
+    const [raw, total] = await Promise.all([
       this.prisma.exercise.findMany({
         where,
         skip,
@@ -59,10 +130,10 @@ export class ExerciseService {
       this.prisma.exercise.count({ where }),
     ]);
 
-    return { data, total, page, limit };
+    return { data: raw.map((e) => this.mapExercise(e)), total, page, limit };
   }
 
-  async findOne(id: number) {
+  async findOne(id: number): Promise<ExerciseResponse> {
     const exercise = await this.prisma.exercise.findUnique({
       where: { id: BigInt(id) },
       include: {
@@ -73,7 +144,7 @@ export class ExerciseService {
     if (!exercise) {
       throw new NotFoundException('Exercise not found');
     }
-    return exercise;
+    return this.mapExercise(exercise);
   }
 
   async create(dto: CreateExerciseDto) {
