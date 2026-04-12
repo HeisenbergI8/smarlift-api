@@ -11,6 +11,10 @@ import {
   CreateMuscleGroupDto,
   UpdateMuscleGroupDto,
 } from './dto';
+import {
+  MuscleGroupResponse,
+  PaginatedMuscleGroupResponse,
+} from './interfaces';
 
 @Injectable()
 export class MuscleGroupService {
@@ -18,7 +22,23 @@ export class MuscleGroupService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(query: FindMuscleGroupsQueryDto) {
+  private mapMuscleGroup(raw: {
+    id: bigint;
+    name: string;
+    bodyRegion: MuscleGroup_bodyRegion;
+    createdAt: Date;
+  }): MuscleGroupResponse {
+    return {
+      id: Number(raw.id),
+      name: raw.name,
+      bodyRegion: raw.bodyRegion,
+      createdAt: raw.createdAt,
+    };
+  }
+
+  async findAll(
+    query: FindMuscleGroupsQueryDto,
+  ): Promise<PaginatedMuscleGroupResponse> {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const skip = (page - 1) * limit;
@@ -27,7 +47,7 @@ export class MuscleGroupService {
       ? { bodyRegion: query.bodyRegion as unknown as MuscleGroup_bodyRegion }
       : {};
 
-    const [data, total] = await Promise.all([
+    const [raw, total] = await Promise.all([
       this.prisma.muscleGroup.findMany({
         where,
         skip,
@@ -37,17 +57,18 @@ export class MuscleGroupService {
       this.prisma.muscleGroup.count({ where }),
     ]);
 
-    return { data, total, page, limit };
+    return { data: raw.map((g) => this.mapMuscleGroup(g)), total, page, limit };
   }
 
-  async create(dto: CreateMuscleGroupDto) {
+  async create(dto: CreateMuscleGroupDto): Promise<MuscleGroupResponse> {
     try {
-      return await this.prisma.muscleGroup.create({
+      const raw = await this.prisma.muscleGroup.create({
         data: {
           name: dto.name,
           bodyRegion: dto.bodyRegion as unknown as MuscleGroup_bodyRegion,
         },
       });
+      return this.mapMuscleGroup(raw);
     } catch (e: unknown) {
       if ((e as { code?: string }).code === 'P2002') {
         throw new ConflictException(
@@ -58,7 +79,10 @@ export class MuscleGroupService {
     }
   }
 
-  async update(id: number, dto: UpdateMuscleGroupDto) {
+  async update(
+    id: number,
+    dto: UpdateMuscleGroupDto,
+  ): Promise<MuscleGroupResponse> {
     const existing = await this.prisma.muscleGroup.findUnique({
       where: { id: BigInt(id) },
     });
@@ -67,7 +91,7 @@ export class MuscleGroupService {
     }
 
     try {
-      return await this.prisma.muscleGroup.update({
+      const raw = await this.prisma.muscleGroup.update({
         where: { id: BigInt(id) },
         data: {
           ...(dto.name !== undefined && { name: dto.name }),
@@ -76,6 +100,7 @@ export class MuscleGroupService {
           }),
         },
       });
+      return this.mapMuscleGroup(raw);
     } catch (e: unknown) {
       if ((e as { code?: string }).code === 'P2002') {
         throw new ConflictException(
