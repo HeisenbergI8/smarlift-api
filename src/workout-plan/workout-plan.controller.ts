@@ -13,7 +13,11 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { WorkoutPlanService } from './workout-plan.service';
-import { CreateWorkoutPlanDto, UpdateWorkoutPlanDto } from './dto';
+import {
+  CreateWorkoutPlanDto,
+  UpdateWorkoutPlanDto,
+  GenerateWorkoutPlanDto,
+} from './dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 
@@ -26,6 +30,25 @@ export class WorkoutPlanController {
   @HttpCode(HttpStatus.CREATED)
   create(@CurrentUser('id') userId: number, @Body() dto: CreateWorkoutPlanDto) {
     return this.workoutPlanService.create(userId, dto);
+  }
+
+  @Post('generate')
+  @HttpCode(HttpStatus.CREATED)
+  generatePlan(
+    @CurrentUser('id') userId: number,
+    @Body() dto: GenerateWorkoutPlanDto,
+  ) {
+    return this.workoutPlanService.generatePlan(userId, dto);
+  }
+
+  @Post('for-user/:userId')
+  @HttpCode(HttpStatus.CREATED)
+  coachCreate(
+    @CurrentUser('id') coachId: number,
+    @Param('userId', ParseIntPipe) targetUserId: number,
+    @Body() dto: CreateWorkoutPlanDto,
+  ) {
+    return this.workoutPlanService.coachCreate(coachId, targetUserId, dto);
   }
 
   @Get()
