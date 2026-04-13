@@ -3,6 +3,11 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpsertMusclePriorityDto } from './dto';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
+import {
+  DeleteMusclePriorityResponse,
+  MusclePriorityResponse,
+  PaginatedMusclePriorityResponse,
+} from './interfaces';
 
 @Injectable()
 export class MusclePriorityService {
@@ -10,7 +15,44 @@ export class MusclePriorityService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async getUserPriorities(userId: number, query: PaginationQueryDto) {
+  private mapPriority(raw: {
+    id: bigint;
+    userId: bigint;
+    muscleGroupId: bigint;
+    priorityLevel: import('@prisma/client').UserMusclePriority_level;
+    hasImbalance: boolean;
+    notes: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+    muscleGroup: {
+      id: bigint;
+      name: string;
+      bodyRegion: import('@prisma/client').MuscleGroup_bodyRegion;
+      createdAt: Date;
+    };
+  }): MusclePriorityResponse {
+    return {
+      id: Number(raw.id),
+      userId: Number(raw.userId),
+      muscleGroupId: Number(raw.muscleGroupId),
+      priorityLevel: raw.priorityLevel,
+      hasImbalance: raw.hasImbalance,
+      notes: raw.notes,
+      createdAt: raw.createdAt,
+      updatedAt: raw.updatedAt,
+      muscleGroup: {
+        id: Number(raw.muscleGroup.id),
+        name: raw.muscleGroup.name,
+        bodyRegion: raw.muscleGroup.bodyRegion,
+        createdAt: raw.muscleGroup.createdAt,
+      },
+    };
+  }
+
+  async getUserPriorities(
+    userId: number,
+    query: PaginationQueryDto,
+  ): Promise<PaginatedMusclePriorityResponse> {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const skip = (page - 1) * limit;
@@ -27,10 +69,13 @@ export class MusclePriorityService {
       this.prisma.userMusclePriority.count({ where: { userId: bigUserId } }),
     ]);
 
-    return { data, total, page, limit };
+    return { data: data.map((r) => this.mapPriority(r)), total, page, limit };
   }
 
-  async upsertPriority(userId: number, dto: UpsertMusclePriorityDto) {
+  async upsertPriority(
+    userId: number,
+    dto: UpsertMusclePriorityDto,
+  ): Promise<MusclePriorityResponse> {
     const muscleGroup = await this.prisma.muscleGroup.findUnique({
       where: { id: BigInt(dto.muscleGroupId) },
     });
@@ -42,7 +87,7 @@ export class MusclePriorityService {
     const bigUserId = BigInt(userId);
     const bigMuscleGroupId = BigInt(muscleGroupId);
 
-    return this.prisma.userMusclePriority.upsert({
+    const raw = await this.prisma.userMusclePriority.upsert({
       where: {
         userId_muscleGroupId: {
           userId: bigUserId,
@@ -57,9 +102,13 @@ export class MusclePriorityService {
       } as unknown as Prisma.UserMusclePriorityUncheckedCreateInput,
       include: { muscleGroup: true },
     });
+    return this.mapPriority(raw);
   }
 
-  async deletePriority(userId: number, muscleGroupId: number) {
+  async deletePriority(
+    userId: number,
+    muscleGroupId: number,
+  ): Promise<DeleteMusclePriorityResponse> {
     const priority = await this.prisma.userMusclePriority.findUnique({
       where: {
         userId_muscleGroupId: {
@@ -80,5 +129,6 @@ export class MusclePriorityService {
         },
       },
     });
+    return { message: 'Muscle priority removed' };
   }
 }
