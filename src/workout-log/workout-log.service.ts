@@ -9,6 +9,11 @@ import { PersonalRecordService } from '../personal-record/personal-record.servic
 import { EgoLiftService } from '../ego-lift/ego-lift.service';
 import { MilestoneService } from '../milestone/milestone.service';
 import { StartSessionDto, LogSetDto, CompleteSessionDto } from './dto';
+import {
+  WorkoutSessionResponse,
+  WorkoutSetResponse,
+  PaginatedSessionsResponse,
+} from './interfaces';
 
 const SESSION_SETS_INCLUDE = {
   sets: {
@@ -28,8 +33,102 @@ export class WorkoutLogService {
     private readonly milestoneService: MilestoneService,
   ) {}
 
-  async startSession(userId: number, dto: StartSessionDto) {
-    return this.prisma.workoutSession.create({
+  private mapSet(raw: {
+    id: bigint;
+    workoutSessionId: bigint;
+    exerciseId: bigint;
+    setNumber: number;
+    reps: number;
+    weightKg: import('@prisma/client').Prisma.Decimal | null;
+    rpe: import('@prisma/client').Prisma.Decimal | null;
+    isWarmup: boolean;
+    notes: string | null;
+    performedAt: Date;
+    exercise: {
+      id: bigint;
+      name: string;
+      description: string | null;
+      category: import('@prisma/client').Exercise_category;
+      difficulty: import('@prisma/client').Exercise_difficulty;
+      isBodyweight: boolean;
+    };
+  }): WorkoutSetResponse {
+    return {
+      id: Number(raw.id),
+      workoutSessionId: Number(raw.workoutSessionId),
+      exerciseId: Number(raw.exerciseId),
+      setNumber: raw.setNumber,
+      reps: raw.reps,
+      weightKg:
+        raw.weightKg !== null ? parseFloat(raw.weightKg.toString()) : null,
+      rpe: raw.rpe !== null ? parseFloat(raw.rpe.toString()) : null,
+      isWarmup: raw.isWarmup,
+      notes: raw.notes,
+      performedAt: raw.performedAt,
+      exercise: {
+        id: Number(raw.exercise.id),
+        name: raw.exercise.name,
+        description: raw.exercise.description,
+        category: raw.exercise.category,
+        difficulty: raw.exercise.difficulty,
+        isBodyweight: raw.exercise.isBodyweight,
+      },
+    };
+  }
+
+  private mapSession(raw: {
+    id: bigint;
+    userId: bigint;
+    workoutPlanDayId: bigint | null;
+    status: import('@prisma/client').WorkoutSession_status;
+    startedAt: Date;
+    completedAt: Date | null;
+    durationMinutes: number | null;
+    notes: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+    sets: {
+      id: bigint;
+      workoutSessionId: bigint;
+      exerciseId: bigint;
+      setNumber: number;
+      reps: number;
+      weightKg: import('@prisma/client').Prisma.Decimal | null;
+      rpe: import('@prisma/client').Prisma.Decimal | null;
+      isWarmup: boolean;
+      notes: string | null;
+      performedAt: Date;
+      exercise: {
+        id: bigint;
+        name: string;
+        description: string | null;
+        category: import('@prisma/client').Exercise_category;
+        difficulty: import('@prisma/client').Exercise_difficulty;
+        isBodyweight: boolean;
+      };
+    }[];
+  }): WorkoutSessionResponse {
+    return {
+      id: Number(raw.id),
+      userId: Number(raw.userId),
+      workoutPlanDayId:
+        raw.workoutPlanDayId !== null ? Number(raw.workoutPlanDayId) : null,
+      status: raw.status,
+      startedAt: raw.startedAt,
+      completedAt: raw.completedAt,
+      durationMinutes: raw.durationMinutes,
+      notes: raw.notes,
+      createdAt: raw.createdAt,
+      updatedAt: raw.updatedAt,
+      sets: raw.sets.map((s) => this.mapSet(s)),
+    };
+  }
+
+  async startSession(
+    userId: number,
+    dto: StartSessionDto,
+  ): Promise<WorkoutSessionResponse> {
+    const raw = await this.prisma.workoutSession.create({
       data: {
         userId: BigInt(userId),
         workoutPlanDayId: dto.workoutPlanDayId
@@ -40,9 +139,14 @@ export class WorkoutLogService {
       },
       include: SESSION_SETS_INCLUDE,
     });
+    return this.mapSession(raw);
   }
 
-  async logSet(userId: number, sessionId: number, dto: LogSetDto) {
+  async logSet(
+    userId: number,
+    sessionId: number,
+    dto: LogSetDto,
+  ): Promise<WorkoutSetResponse> {
     const session = await this.prisma.workoutSession.findUnique({
       where: { id: BigInt(sessionId) },
     });
@@ -110,14 +214,14 @@ export class WorkoutLogService {
       }
     }
 
-    return newSet;
+    return this.mapSet(newSet);
   }
 
   async completeSession(
     userId: number,
     sessionId: number,
     dto: CompleteSessionDto,
-  ) {
+  ): Promise<WorkoutSessionResponse> {
     const session = await this.prisma.workoutSession.findUnique({
       where: { id: BigInt(sessionId) },
     });
@@ -150,10 +254,14 @@ export class WorkoutLogService {
       );
     }
 
-    return updated;
+    return this.mapSession(updated);
   }
 
-  async getSessionHistory(userId: number, page: number, limit: number) {
+  async getSessionHistory(
+    userId: number,
+    page: number,
+    limit: number,
+  ): Promise<PaginatedSessionsResponse> {
     const skip = (page - 1) * limit;
     const where = { userId: BigInt(userId) };
 
@@ -168,10 +276,13 @@ export class WorkoutLogService {
       this.prisma.workoutSession.count({ where }),
     ]);
 
-    return { data, total, page, limit };
+    return { data: data.map((s) => this.mapSession(s)), total, page, limit };
   }
 
-  async getSessionById(userId: number, sessionId: number) {
+  async getSessionById(
+    userId: number,
+    sessionId: number,
+  ): Promise<WorkoutSessionResponse> {
     const session = await this.prisma.workoutSession.findUnique({
       where: { id: BigInt(sessionId) },
       include: SESSION_SETS_INCLUDE,
@@ -179,7 +290,7 @@ export class WorkoutLogService {
     if (!session || session.userId !== BigInt(userId)) {
       throw new NotFoundException('Session not found');
     }
-    return session;
+    return this.mapSession(session);
   }
 
   async deleteSession(userId: number, sessionId: number): Promise<void> {
