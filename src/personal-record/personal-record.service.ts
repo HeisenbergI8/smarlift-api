@@ -1,13 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-
-interface WorkoutSetInput {
-  id: bigint;
-  exerciseId: bigint;
-  reps: number;
-  weightKg: { toNumber(): number } | null;
-  performedAt: Date;
-}
+import { WorkoutSetInput } from './interfaces';
 
 @Injectable()
 export class PersonalRecordService {
