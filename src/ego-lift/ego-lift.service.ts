@@ -3,21 +3,7 @@ import { Notification_type } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationService } from '../notification/notification.service';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
-
-interface CurrentSetInput {
-  id: bigint;
-  exerciseId: bigint;
-  workoutSessionId: bigint;
-  reps: number;
-  weightKg: { toNumber(): number } | null;
-}
-
-type TrainingGoal = 'strength' | 'hypertrophy' | 'endurance';
-
-interface ThresholdRule {
-  weightIncreaseMin: number;
-  repDropMin: number;
-}
+import { CurrentSetInput, TrainingGoal, ThresholdRule } from './interfaces';
 
 const THRESHOLD_RULES: Record<TrainingGoal, ThresholdRule> = {
   strength: { weightIncreaseMin: 10, repDropMin: 20 },
