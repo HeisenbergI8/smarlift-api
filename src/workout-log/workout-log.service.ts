@@ -2,13 +2,20 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ConflictException,
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { PersonalRecordService } from '../personal-record/personal-record.service';
 import { EgoLiftService } from '../ego-lift/ego-lift.service';
 import { MilestoneService } from '../milestone/milestone.service';
-import { StartSessionDto, LogSetDto, CompleteSessionDto } from './dto';
+import {
+  StartSessionDto,
+  LogSetDto,
+  CompleteSessionDto,
+  SkipSessionDto,
+  SessionStatusFilter,
+} from './dto';
 import {
   WorkoutSessionResponse,
   WorkoutSetResponse,
@@ -128,6 +135,15 @@ export class WorkoutLogService {
     userId: number,
     dto: StartSessionDto,
   ): Promise<WorkoutSessionResponse> {
+    const existing = await this.prisma.workoutSession.findFirst({
+      where: { userId: BigInt(userId), status: 'in_progress' },
+    });
+    if (existing) {
+      throw new ConflictException(
+        'You already have a session in progress. Complete or skip it before starting a new one.',
+      );
+    }
+
     const raw = await this.prisma.workoutSession.create({
       data: {
         userId: BigInt(userId),
@@ -261,9 +277,13 @@ export class WorkoutLogService {
     userId: number,
     page: number,
     limit: number,
+    status?: SessionStatusFilter,
   ): Promise<PaginatedSessionsResponse> {
     const skip = (page - 1) * limit;
-    const where = { userId: BigInt(userId) };
+    const where = {
+      userId: BigInt(userId),
+      ...(status ? { status } : {}),
+    };
 
     const [data, total] = await Promise.all([
       this.prisma.workoutSession.findMany({
@@ -291,6 +311,33 @@ export class WorkoutLogService {
       throw new NotFoundException('Session not found');
     }
     return this.mapSession(session);
+  }
+
+  async skipSession(
+    userId: number,
+    sessionId: number,
+    dto: SkipSessionDto,
+  ): Promise<WorkoutSessionResponse> {
+    const session = await this.prisma.workoutSession.findUnique({
+      where: { id: BigInt(sessionId) },
+    });
+    if (!session || session.userId !== BigInt(userId)) {
+      throw new NotFoundException('Session not found');
+    }
+    if (session.status !== 'in_progress') {
+      throw new BadRequestException('Only in-progress sessions can be skipped');
+    }
+
+    const updated = await this.prisma.workoutSession.update({
+      where: { id: BigInt(sessionId) },
+      data: {
+        status: 'skipped',
+        ...(dto.notes !== undefined && { notes: dto.notes }),
+      },
+      include: SESSION_SETS_INCLUDE,
+    });
+
+    return this.mapSession(updated);
   }
 
   async deleteSession(userId: number, sessionId: number): Promise<void> {

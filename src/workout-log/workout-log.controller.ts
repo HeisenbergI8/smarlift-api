@@ -13,8 +13,13 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { WorkoutLogService } from './workout-log.service';
-import { StartSessionDto, LogSetDto, CompleteSessionDto } from './dto';
-import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
+import {
+  StartSessionDto,
+  LogSetDto,
+  CompleteSessionDto,
+  SkipSessionDto,
+  SessionQueryDto,
+} from './dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 
@@ -35,12 +40,13 @@ export class WorkoutLogController {
   @Get()
   getHistory(
     @CurrentUser('id') userId: number,
-    @Query() query: PaginationQueryDto,
+    @Query() query: SessionQueryDto,
   ) {
     return this.workoutLogService.getSessionHistory(
       userId,
       query.page ?? 1,
       query.limit ?? 20,
+      query.status,
     );
   }
 
@@ -69,6 +75,15 @@ export class WorkoutLogController {
     @Body() dto: CompleteSessionDto,
   ) {
     return this.workoutLogService.completeSession(userId, sessionId, dto);
+  }
+
+  @Patch(':id/skip')
+  skipSession(
+    @CurrentUser('id') userId: number,
+    @Param('id', ParseIntPipe) sessionId: number,
+    @Body() dto: SkipSessionDto,
+  ) {
+    return this.workoutLogService.skipSession(userId, sessionId, dto);
   }
 
   @Delete(':id')
