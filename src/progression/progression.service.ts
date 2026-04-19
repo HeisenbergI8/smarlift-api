@@ -8,6 +8,13 @@ import { PrismaService } from '../prisma/prisma.service';
 import { NotificationService } from '../notification/notification.service';
 import { UpdateProgressionSettingsDto } from './dto';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
+import {
+  ExerciseSummary,
+  PaginatedProgressionHistoryResponse,
+  ProgressionEvaluationResponse,
+  ProgressionHistoryResponse,
+  ProgressionSettingResponse,
+} from './interfaces';
 
 const FREQUENCY_SESSION_MAP: Record<ProgressionSetting_frequency, number> = {
   weekly: 1,
@@ -27,17 +34,20 @@ export class ProgressionService {
     private readonly notificationService: NotificationService,
   ) {}
 
-  async getSettings(userId: number) {
+  async getSettings(userId: number): Promise<ProgressionSettingResponse> {
     const settings = await this.prisma.progressionSetting.findUnique({
       where: { userId: BigInt(userId) },
     });
     if (!settings) {
       throw new NotFoundException('Progression settings not found');
     }
-    return settings;
+    return this.mapSetting(settings);
   }
 
-  async upsertSettings(userId: number, dto: UpdateProgressionSettingsDto) {
+  async upsertSettings(
+    userId: number,
+    dto: UpdateProgressionSettingsDto,
+  ): Promise<ProgressionSettingResponse> {
     const data = {
       ...(dto.isEnabled !== undefined && { isEnabled: dto.isEnabled }),
       ...(dto.progressionFrequency !== undefined && {
@@ -54,14 +64,18 @@ export class ProgressionService {
       }),
     };
 
-    return this.prisma.progressionSetting.upsert({
+    const result = await this.prisma.progressionSetting.upsert({
       where: { userId: BigInt(userId) },
       update: data,
       create: { userId: BigInt(userId), ...data },
     });
+    return this.mapSetting(result);
   }
 
-  async getHistory(userId: number, query: PaginationQueryDto) {
+  async getHistory(
+    userId: number,
+    query: PaginationQueryDto,
+  ): Promise<PaginatedProgressionHistoryResponse> {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const skip = (page - 1) * limit;
@@ -81,14 +95,14 @@ export class ProgressionService {
       this.prisma.progressionHistory.count({ where }),
     ]);
 
-    return { data, total, page, limit };
+    return { data: data.map((h) => this.mapHistory(h)), total, page, limit };
   }
 
   async getHistoryByExercise(
     userId: number,
     exerciseId: number,
     query: PaginationQueryDto,
-  ) {
+  ): Promise<PaginatedProgressionHistoryResponse> {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const skip = (page - 1) * limit;
@@ -109,10 +123,12 @@ export class ProgressionService {
       this.prisma.progressionHistory.count({ where }),
     ]);
 
-    return { data, total, page, limit };
+    return { data: data.map((h) => this.mapHistory(h)), total, page, limit };
   }
 
-  async evaluateProgression(userId: number) {
+  async evaluateProgression(
+    userId: number,
+  ): Promise<ProgressionEvaluationResponse> {
     const settings = await this.getValidatedSettings(userId);
 
     if (!settings.isEnabled) {
@@ -261,7 +277,10 @@ export class ProgressionService {
       }
     }
 
-    return { message: 'Evaluation complete', adjustments };
+    return {
+      message: 'Evaluation complete',
+      adjustments: adjustments.map((h) => this.mapHistory(h)),
+    };
   }
 
   private async resolveCurrentWeight(
@@ -326,5 +345,67 @@ export class ProgressionService {
     }
 
     return null;
+  }
+
+  private mapSetting(raw: {
+    id: bigint;
+    userId: bigint;
+    isEnabled: boolean;
+    progressionFrequency: import('@prisma/client').ProgressionSetting_frequency;
+    trainingGoal: import('@prisma/client').ProgressionSetting_trainingGoal;
+    weightIncrementKg: Prisma.Decimal;
+    maxRepsBeforeIncrease: number;
+    createdAt: Date;
+    updatedAt: Date;
+  }): ProgressionSettingResponse {
+    return {
+      id: Number(raw.id),
+      userId: Number(raw.userId),
+      isEnabled: raw.isEnabled,
+      progressionFrequency: raw.progressionFrequency,
+      trainingGoal: raw.trainingGoal,
+      weightIncrementKg: parseFloat(raw.weightIncrementKg.toString()),
+      maxRepsBeforeIncrease: raw.maxRepsBeforeIncrease,
+      createdAt: raw.createdAt,
+      updatedAt: raw.updatedAt,
+    };
+  }
+
+  private mapHistory(raw: {
+    id: bigint;
+    userId: bigint;
+    exerciseId: bigint;
+    adjustmentType: import('@prisma/client').ProgressionHistory_adjustmentType;
+    previousValue: Prisma.Decimal;
+    newValue: Prisma.Decimal;
+    reason: string | null;
+    source: import('@prisma/client').ProgressionHistory_source;
+    createdAt: Date;
+    exercise: { id: bigint; name: string; description: string | null };
+  }): ProgressionHistoryResponse {
+    return {
+      id: Number(raw.id),
+      userId: Number(raw.userId),
+      exerciseId: Number(raw.exerciseId),
+      adjustmentType: raw.adjustmentType,
+      previousValue: parseFloat(raw.previousValue.toString()),
+      newValue: parseFloat(raw.newValue.toString()),
+      reason: raw.reason,
+      source: raw.source,
+      createdAt: raw.createdAt,
+      exercise: this.mapExerciseSummary(raw.exercise),
+    };
+  }
+
+  private mapExerciseSummary(raw: {
+    id: bigint;
+    name: string;
+    description: string | null;
+  }): ExerciseSummary {
+    return {
+      id: Number(raw.id),
+      name: raw.name,
+      description: raw.description,
+    };
   }
 }
