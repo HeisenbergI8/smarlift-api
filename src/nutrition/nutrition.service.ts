@@ -12,6 +12,7 @@ import {
   GetDailyLogsQueryDto,
 } from './dto';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
+import { NutritionRecommendationResponse } from './interfaces';
 import { getMonday } from '../common/utils/date.utils';
 
 const ACTIVITY_MULTIPLIERS: Record<string, number> = {
@@ -22,6 +23,17 @@ const ACTIVITY_MULTIPLIERS: Record<string, number> = {
   extra_active: 1.9,
 };
 
+const TRAINING_DAYS_FLOOR_MULTIPLIERS: Record<number, number> = {
+  0: 1.2,
+  1: 1.2,
+  2: 1.375,
+  3: 1.375,
+  4: 1.55,
+  5: 1.55,
+  6: 1.725,
+  7: 1.725,
+};
+
 const MIN_DAILY_CALORIES = 1200;
 
 @Injectable()
@@ -30,7 +42,43 @@ export class NutritionService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async getActiveRecommendation(userId: number) {
+  private mapRecommendation(raw: {
+    id: bigint;
+    userId: bigint;
+    createdBy: bigint | null;
+    source: import('@prisma/client').NutritionRecommendation_source;
+    dailyCaloriesKcal: number;
+    proteinG: number;
+    carbohydratesG: number;
+    fatsG: number;
+    isActive: boolean;
+    effectiveFrom: Date;
+    effectiveTo: Date | null;
+    notes: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+  }): NutritionRecommendationResponse {
+    return {
+      id: Number(raw.id),
+      userId: Number(raw.userId),
+      createdBy: raw.createdBy !== null ? Number(raw.createdBy) : null,
+      source: raw.source,
+      dailyCaloriesKcal: raw.dailyCaloriesKcal,
+      proteinG: raw.proteinG,
+      carbohydratesG: raw.carbohydratesG,
+      fatsG: raw.fatsG,
+      isActive: raw.isActive,
+      effectiveFrom: raw.effectiveFrom,
+      effectiveTo: raw.effectiveTo,
+      notes: raw.notes,
+      createdAt: raw.createdAt,
+      updatedAt: raw.updatedAt,
+    };
+  }
+
+  async getActiveRecommendation(
+    userId: number,
+  ): Promise<NutritionRecommendationResponse> {
     const recommendation = await this.prisma.nutritionRecommendation.findFirst({
       where: { userId: BigInt(userId), isActive: true },
       orderBy: { createdAt: 'desc' },
@@ -38,10 +86,13 @@ export class NutritionService {
     if (!recommendation) {
       throw new NotFoundException('No active nutrition recommendation found');
     }
-    return recommendation;
+    return this.mapRecommendation(recommendation);
   }
 
-  async createRecommendation(userId: number, dto: CreateNutritionRecDto) {
+  async createRecommendation(
+    userId: number,
+    dto: CreateNutritionRecDto,
+  ): Promise<NutritionRecommendationResponse> {
     return this.prisma.$transaction(async (tx) => {
       await tx.nutritionRecommendation.updateMany({
         where: { userId: BigInt(userId), isActive: true },
@@ -51,7 +102,7 @@ export class NutritionService {
         },
       });
 
-      return tx.nutritionRecommendation.create({
+      const rec = await tx.nutritionRecommendation.create({
         data: {
           userId: BigInt(userId),
           dailyCaloriesKcal: dto.dailyCaloriesKcal,
@@ -65,10 +116,13 @@ export class NutritionService {
           isActive: true,
         },
       });
+      return this.mapRecommendation(rec);
     });
   }
 
-  async generateSmartRecommendation(userId: number) {
+  async generateSmartRecommendation(
+    userId: number,
+  ): Promise<NutritionRecommendationResponse> {
     const profile = await this.prisma.userProfile.findUnique({
       where: { userId: BigInt(userId) },
     });
@@ -81,9 +135,12 @@ export class NutritionService {
     const gender = profile!.gender;
     const activityLevel = profile!.activityLevel!;
     const fitnessGoal = profile!.fitnessGoal!;
+    const trainingDays = profile!.trainingDaysPerWeek;
 
     const bmr = this.calculateBmr(weightKg, heightCm, age, gender);
-    const tdee = bmr * (ACTIVITY_MULTIPLIERS[activityLevel] ?? 1.2);
+    const activityMultiplier = ACTIVITY_MULTIPLIERS[activityLevel] ?? 1.2;
+    const trainingFloor = TRAINING_DAYS_FLOOR_MULTIPLIERS[trainingDays] ?? 1.2;
+    const tdee = bmr * Math.max(activityMultiplier, trainingFloor);
     const adjustedCalories = Math.max(
       MIN_DAILY_CALORIES,
       Math.round(this.applyGoalAdjustment(tdee, fitnessGoal)),
@@ -135,7 +192,10 @@ export class NutritionService {
 
   private applyGoalAdjustment(tdee: number, fitnessGoal: string): number {
     if (fitnessGoal === 'lose_weight') {
-      return tdee - 500;
+      // Cap deficit at the smaller of 500 kcal or 20% of TDEE to prevent
+      // overly aggressive cuts for people with low activity / low TDEE.
+      const safeDeficit = Math.min(500, Math.round(tdee * 0.2));
+      return tdee - safeDeficit;
     }
     if (fitnessGoal === 'gain_muscle') {
       return tdee + 300;
@@ -168,7 +228,7 @@ export class NutritionService {
       carbohydratesG: number;
       fatsG: number;
     },
-  ) {
+  ): Promise<NutritionRecommendationResponse> {
     return this.prisma.$transaction(async (tx) => {
       await tx.nutritionRecommendation.updateMany({
         where: { userId: BigInt(userId), isActive: true },
@@ -178,7 +238,7 @@ export class NutritionService {
         },
       });
 
-      return tx.nutritionRecommendation.create({
+      const rec = await tx.nutritionRecommendation.create({
         data: {
           userId: BigInt(userId),
           dailyCaloriesKcal: data.dailyCaloriesKcal,
@@ -190,6 +250,7 @@ export class NutritionService {
           isActive: true,
         },
       });
+      return this.mapRecommendation(rec);
     });
   }
 
