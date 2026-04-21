@@ -49,7 +49,6 @@ export class BodyWeightController {
   }
 
   @Delete(':id')
-  @HttpCode(HttpStatus.NO_CONTENT)
   deleteLog(
     @CurrentUser('id') userId: number,
     @Param('id', ParseIntPipe) logId: number,

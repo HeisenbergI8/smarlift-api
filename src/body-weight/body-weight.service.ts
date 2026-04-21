@@ -1,7 +1,12 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, BodyWeightLog } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { LogBodyWeightDto, GetBodyWeightLogsQueryDto } from './dto';
+import {
+  BodyWeightLogResponse,
+  WeeklyAverageResponse,
+  PaginatedBodyWeightLogsResponse,
+} from './interfaces';
 
 @Injectable()
 export class BodyWeightService {
@@ -9,11 +14,14 @@ export class BodyWeightService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async logWeight(userId: number, dto: LogBodyWeightDto) {
+  async logWeight(
+    userId: number,
+    dto: LogBodyWeightDto,
+  ): Promise<BodyWeightLogResponse> {
     const logDate = new Date(dto.logDate);
     const source = dto.source ?? 'manual';
 
-    return this.prisma.bodyWeightLog.upsert({
+    const record = await this.prisma.bodyWeightLog.upsert({
       where: {
         userId_logDate: { userId: BigInt(userId), logDate },
       },
@@ -25,9 +33,14 @@ export class BodyWeightService {
         source,
       },
     });
+
+    return this.mapLog(record);
   }
 
-  async getLogs(userId: number, query: GetBodyWeightLogsQueryDto) {
+  async getLogs(
+    userId: number,
+    query: GetBodyWeightLogsQueryDto,
+  ): Promise<PaginatedBodyWeightLogsResponse> {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const skip = (page - 1) * limit;
@@ -46,7 +59,7 @@ export class BodyWeightService {
       }
     }
 
-    const [data, total] = await Promise.all([
+    const [raw, total] = await Promise.all([
       this.prisma.bodyWeightLog.findMany({
         where,
         orderBy: { logDate: 'desc' },
@@ -56,10 +69,13 @@ export class BodyWeightService {
       this.prisma.bodyWeightLog.count({ where }),
     ]);
 
-    return { data, total, page, limit };
+    return { data: raw.map((r) => this.mapLog(r)), total, page, limit };
   }
 
-  async getWeeklyAverages(userId: number, weeks: number = 12) {
+  async getWeeklyAverages(
+    userId: number,
+    weeks: number = 12,
+  ): Promise<WeeklyAverageResponse[]> {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - weeks * 7);
 
@@ -74,9 +90,7 @@ export class BodyWeightService {
     return this.groupLogsByWeek(logs);
   }
 
-  private groupLogsByWeek(
-    logs: Awaited<ReturnType<typeof this.prisma.bodyWeightLog.findMany>>,
-  ): { weekStart: Date; avgWeightKg: number; entryCount: number }[] {
+  private groupLogsByWeek(logs: BodyWeightLog[]): WeeklyAverageResponse[] {
     const weekMap = new Map<
       string,
       { weekStart: Date; totalWeight: number; count: number }
@@ -114,14 +128,16 @@ export class BodyWeightService {
     return d;
   }
 
-  async getLatest(userId: number) {
-    return this.prisma.bodyWeightLog.findFirst({
+  async getLatest(userId: number): Promise<BodyWeightLogResponse | null> {
+    const record = await this.prisma.bodyWeightLog.findFirst({
       where: { userId: BigInt(userId) },
       orderBy: { logDate: 'desc' },
     });
+
+    return record ? this.mapLog(record) : null;
   }
 
-  async deleteLog(userId: number, logId: number): Promise<void> {
+  async deleteLog(userId: number, logId: number): Promise<{ message: string }> {
     const log = await this.prisma.bodyWeightLog.findUnique({
       where: { id: BigInt(logId) },
     });
@@ -132,5 +148,18 @@ export class BodyWeightService {
     await this.prisma.bodyWeightLog.delete({
       where: { id: BigInt(logId) },
     });
+
+    return { message: 'Log deleted' };
+  }
+
+  private mapLog(raw: BodyWeightLog): BodyWeightLogResponse {
+    return {
+      id: Number(raw.id),
+      userId: Number(raw.userId),
+      logDate: raw.logDate,
+      weightKg: parseFloat(raw.weightKg.toString()),
+      source: raw.source,
+      createdAt: raw.createdAt,
+    };
   }
 }
