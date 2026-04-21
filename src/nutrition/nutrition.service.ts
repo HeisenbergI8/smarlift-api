@@ -12,7 +12,14 @@ import {
   GetDailyLogsQueryDto,
 } from './dto';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
-import { NutritionRecommendationResponse } from './interfaces';
+import {
+  NutritionRecommendationResponse,
+  DailyNutritionLogResponse,
+  NutritionAdjustmentResponse,
+  PaginatedDailyLogsResponse,
+  PaginatedAdjustmentsResponse,
+  PlateauDetectionResponse,
+} from './interfaces';
 import { getMonday } from '../common/utils/date.utils';
 
 const ACTIVITY_MULTIPLIERS: Record<string, number> = {
@@ -254,10 +261,97 @@ export class NutritionService {
     });
   }
 
-  async logDailyNutrition(userId: number, dto: LogDailyNutritionDto) {
+  private mapDailyLog(raw: {
+    id: bigint;
+    userId: bigint;
+    logDate: Date;
+    totalCaloriesKcal: number | null;
+    proteinG: number | null;
+    carbohydratesG: number | null;
+    fatsG: number | null;
+    notes: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+  }): DailyNutritionLogResponse {
+    return {
+      id: Number(raw.id),
+      userId: Number(raw.userId),
+      logDate: raw.logDate,
+      totalCaloriesKcal: raw.totalCaloriesKcal,
+      proteinG: raw.proteinG,
+      carbohydratesG: raw.carbohydratesG,
+      fatsG: raw.fatsG,
+      notes: raw.notes,
+      createdAt: raw.createdAt,
+      updatedAt: raw.updatedAt,
+    };
+  }
+
+  private mapAdjustment(raw: {
+    id: bigint;
+    userId: bigint;
+    nutritionRecommendationId: bigint;
+    triggerReason: import('@prisma/client').NutritionAdjustment_trigger;
+    previousCaloriesKcal: number;
+    newCaloriesKcal: number;
+    previousProteinG: number | null;
+    newProteinG: number | null;
+    previousCarbohydratesG: number | null;
+    newCarbohydratesG: number | null;
+    previousFatsG: number | null;
+    newFatsG: number | null;
+    weeklyAvgWeightKg: import('@prisma/client').Prisma.Decimal | null;
+    notes: string | null;
+    source: import('@prisma/client').NutritionAdjustment_source;
+    createdAt: Date;
+    nutritionRecommendation: {
+      id: bigint;
+      userId: bigint;
+      createdBy: bigint | null;
+      source: import('@prisma/client').NutritionRecommendation_source;
+      dailyCaloriesKcal: number;
+      proteinG: number;
+      carbohydratesG: number;
+      fatsG: number;
+      isActive: boolean;
+      effectiveFrom: Date;
+      effectiveTo: Date | null;
+      notes: string | null;
+      createdAt: Date;
+      updatedAt: Date;
+    };
+  }): NutritionAdjustmentResponse {
+    return {
+      id: Number(raw.id),
+      userId: Number(raw.userId),
+      nutritionRecommendationId: Number(raw.nutritionRecommendationId),
+      triggerReason: raw.triggerReason,
+      previousCaloriesKcal: raw.previousCaloriesKcal,
+      newCaloriesKcal: raw.newCaloriesKcal,
+      previousProteinG: raw.previousProteinG,
+      newProteinG: raw.newProteinG,
+      previousCarbohydratesG: raw.previousCarbohydratesG,
+      newCarbohydratesG: raw.newCarbohydratesG,
+      previousFatsG: raw.previousFatsG,
+      newFatsG: raw.newFatsG,
+      weeklyAvgWeightKg:
+        raw.weeklyAvgWeightKg !== null ? Number(raw.weeklyAvgWeightKg) : null,
+      notes: raw.notes,
+      source: raw.source,
+      createdAt: raw.createdAt,
+      nutritionRecommendation: this.mapRecommendation(
+        raw.nutritionRecommendation,
+      ),
+    };
+  }
+
+  async logDailyNutrition(
+    userId: number,
+    dto: LogDailyNutritionDto,
+  ): Promise<DailyNutritionLogResponse> {
     const logDate = new Date(dto.logDate);
 
-    return this.prisma.dailyNutritionLog.upsert({
+    const log = await this.prisma.dailyNutritionLog.upsert({
       where: {
         userId_logDate: { userId: BigInt(userId), logDate },
       },
@@ -278,9 +372,13 @@ export class NutritionService {
         notes: dto.notes,
       },
     });
+    return this.mapDailyLog(log);
   }
 
-  async getDailyLogs(userId: number, query: GetDailyLogsQueryDto) {
+  async getDailyLogs(
+    userId: number,
+    query: GetDailyLogsQueryDto,
+  ): Promise<PaginatedDailyLogsResponse> {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const skip = (page - 1) * limit;
@@ -299,7 +397,7 @@ export class NutritionService {
       }
     }
 
-    const [data, total] = await Promise.all([
+    const [rows, total] = await Promise.all([
       this.prisma.dailyNutritionLog.findMany({
         where,
         orderBy: { logDate: 'desc' },
@@ -309,10 +407,13 @@ export class NutritionService {
       this.prisma.dailyNutritionLog.count({ where }),
     ]);
 
-    return { data, total, page, limit };
+    return { data: rows.map((r) => this.mapDailyLog(r)), total, page, limit };
   }
 
-  async getAdjustmentHistory(userId: number, query: PaginationQueryDto) {
+  async getAdjustmentHistory(
+    userId: number,
+    query: PaginationQueryDto,
+  ): Promise<PaginatedAdjustmentsResponse> {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const skip = (page - 1) * limit;
@@ -321,7 +422,7 @@ export class NutritionService {
       userId: BigInt(userId),
     };
 
-    const [data, total] = await Promise.all([
+    const [rows, total] = await Promise.all([
       this.prisma.nutritionAdjustment.findMany({
         where,
         include: { nutritionRecommendation: true },
@@ -332,10 +433,17 @@ export class NutritionService {
       this.prisma.nutritionAdjustment.count({ where }),
     ]);
 
-    return { data, total, page, limit };
+    return {
+      data: rows.map((r) => this.mapAdjustment(r)),
+      total,
+      page,
+      limit,
+    };
   }
 
-  async detectPlateauAndAdjust(userId: number) {
+  async detectPlateauAndAdjust(
+    userId: number,
+  ): Promise<PlateauDetectionResponse> {
     const profile = await this.prisma.userProfile.findUnique({
       where: { userId: BigInt(userId) },
     });
@@ -395,8 +503,8 @@ export class NutritionService {
 
     return {
       plateauDetected: true,
-      adjustment,
-      newRecommendation,
+      adjustment: this.mapAdjustment(adjustment),
+      newRecommendation: this.mapRecommendation(newRecommendation),
     };
   }
 
@@ -482,7 +590,13 @@ export class NutritionService {
         },
       });
 
-      return { newRecommendation, adjustment };
+      return {
+        newRecommendation,
+        adjustment: {
+          ...adjustment,
+          nutritionRecommendation: newRecommendation,
+        },
+      };
     });
   }
 
