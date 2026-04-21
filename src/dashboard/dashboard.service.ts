@@ -1,6 +1,19 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { GetKpiSnapshotsQueryDto } from './dto';
+import {
+  ActivePlanSummary,
+  DashboardOverviewResponse,
+  KpiSnapshotListResponse,
+  KpiSnapshotResponse,
+  NutritionAdherenceResponse,
+  NutritionRecommendationResponse,
+  StrengthProgressResponse,
+  WeeklyConsistencyItem,
+  WeightTrendResponse,
+  WorkoutConsistencyResponse,
+} from './interfaces';
 import { getMonday } from '../common/utils/date.utils';
 
 @Injectable()
@@ -9,7 +22,74 @@ export class DashboardService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async getOverview(userId: number) {
+  private mapKpiSnapshot(raw: {
+    id: bigint;
+    userId: bigint;
+    snapshotDate: Date;
+    bodyWeightKg: Prisma.Decimal | null;
+    totalSessionsWeek: number | null;
+    plannedSessionsWeek: number | null;
+    consistencyScore: Prisma.Decimal | null;
+    strengthIndex: Prisma.Decimal | null;
+    weeklyStreak: number;
+    createdAt: Date;
+  }): KpiSnapshotResponse {
+    return {
+      id: Number(raw.id),
+      userId: Number(raw.userId),
+      snapshotDate: raw.snapshotDate,
+      bodyWeightKg:
+        raw.bodyWeightKg !== null
+          ? parseFloat(raw.bodyWeightKg.toString())
+          : null,
+      totalSessionsWeek: raw.totalSessionsWeek,
+      plannedSessionsWeek: raw.plannedSessionsWeek,
+      consistencyScore:
+        raw.consistencyScore !== null
+          ? parseFloat(raw.consistencyScore.toString())
+          : null,
+      strengthIndex:
+        raw.strengthIndex !== null
+          ? parseFloat(raw.strengthIndex.toString())
+          : null,
+      weeklyStreak: raw.weeklyStreak,
+      createdAt: raw.createdAt,
+    };
+  }
+
+  private mapNutritionRecommendation(raw: {
+    id: bigint;
+    userId: bigint;
+    source: NutritionRecommendationResponse['source'];
+    dailyCaloriesKcal: number;
+    proteinG: number;
+    carbohydratesG: number;
+    fatsG: number;
+    isActive: boolean;
+    effectiveFrom: Date;
+    effectiveTo: Date | null;
+    notes: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+  }): NutritionRecommendationResponse {
+    return {
+      id: Number(raw.id),
+      userId: Number(raw.userId),
+      source: raw.source,
+      dailyCaloriesKcal: raw.dailyCaloriesKcal,
+      proteinG: raw.proteinG,
+      carbohydratesG: raw.carbohydratesG,
+      fatsG: raw.fatsG,
+      isActive: raw.isActive,
+      effectiveFrom: raw.effectiveFrom,
+      effectiveTo: raw.effectiveTo,
+      notes: raw.notes,
+      createdAt: raw.createdAt,
+      updatedAt: raw.updatedAt,
+    };
+  }
+
+  async getOverview(userId: number): Promise<DashboardOverviewResponse> {
     const [
       latestWeight,
       latestSnapshot,
@@ -49,8 +129,12 @@ export class DashboardService {
             logDate: latestWeight.logDate,
           }
         : null,
-      latestSnapshot,
-      activeRecommendation,
+      latestSnapshot: latestSnapshot
+        ? this.mapKpiSnapshot(latestSnapshot)
+        : null,
+      activeRecommendation: activeRecommendation
+        ? this.mapNutritionRecommendation(activeRecommendation)
+        : null,
       activePlan: activePlan
         ? {
             id: Number(activePlan.id),
@@ -63,7 +147,7 @@ export class DashboardService {
     };
   }
 
-  async getStrengthProgress(userId: number) {
+  async getStrengthProgress(userId: number): Promise<StrengthProgressResponse> {
     const records = await this.prisma.personalRecord.findMany({
       where: { userId: BigInt(userId), recordType: 'max_weight' },
       include: { exercise: true },
@@ -83,7 +167,7 @@ export class DashboardService {
   async getWeightTrend(
     userId: number,
     period: 'week' | 'month' | '3months' = 'month',
-  ) {
+  ): Promise<WeightTrendResponse> {
     const daysMap: Record<string, number> = {
       week: 7,
       month: 30,
@@ -132,7 +216,10 @@ export class DashboardService {
     };
   }
 
-  async getWorkoutConsistency(userId: number, weeks: number = 8) {
+  async getWorkoutConsistency(
+    userId: number,
+    weeks: number = 8,
+  ): Promise<WorkoutConsistencyResponse> {
     const now = new Date();
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - weeks * 7);
@@ -188,18 +275,8 @@ export class DashboardService {
     weeks: number,
     planned: number,
     now: Date,
-  ): {
-    weekStart: Date;
-    planned: number;
-    completed: number;
-    consistencyPct: number;
-  }[] {
-    const result: {
-      weekStart: Date;
-      planned: number;
-      completed: number;
-      consistencyPct: number;
-    }[] = [];
+  ): WeeklyConsistencyItem[] {
+    const result: WeeklyConsistencyItem[] = [];
 
     for (let i = weeks - 1; i >= 0; i--) {
       const weekStart = getMonday(
@@ -222,7 +299,10 @@ export class DashboardService {
     return result;
   }
 
-  async getNutritionAdherence(userId: number, days: number = 30) {
+  async getNutritionAdherence(
+    userId: number,
+    days: number = 30,
+  ): Promise<NutritionAdherenceResponse> {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
 
@@ -271,7 +351,10 @@ export class DashboardService {
     return { entries, avgAdherencePct };
   }
 
-  async getKpiSnapshots(userId: number, query: GetKpiSnapshotsQueryDto) {
+  async getKpiSnapshots(
+    userId: number,
+    query: GetKpiSnapshotsQueryDto,
+  ): Promise<KpiSnapshotListResponse> {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const skip = (page - 1) * limit;
@@ -291,7 +374,7 @@ export class DashboardService {
       }
     }
 
-    const [data, total] = await Promise.all([
+    const [rawData, total] = await Promise.all([
       this.prisma.kpiSnapshot.findMany({
         where,
         orderBy: { snapshotDate: 'asc' },
@@ -301,10 +384,15 @@ export class DashboardService {
       this.prisma.kpiSnapshot.count({ where }),
     ]);
 
-    return { data, total, page, limit };
+    return {
+      data: rawData.map((s) => this.mapKpiSnapshot(s)),
+      total,
+      page,
+      limit,
+    };
   }
 
-  async createKpiSnapshot(userId: number) {
+  async createKpiSnapshot(userId: number): Promise<KpiSnapshotResponse> {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -357,7 +445,7 @@ export class DashboardService {
     const weeklyStreak =
       sessionsThisWeek >= plannedSessions ? prevStreak + 1 : 0;
 
-    return this.prisma.kpiSnapshot.upsert({
+    const raw = await this.prisma.kpiSnapshot.upsert({
       where: {
         userId_snapshotDate: {
           userId: BigInt(userId),
@@ -383,5 +471,6 @@ export class DashboardService {
         weeklyStreak,
       },
     });
+    return this.mapKpiSnapshot(raw);
   }
 }
