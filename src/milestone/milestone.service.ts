@@ -1,7 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Notification_type } from '@prisma/client';
+import { Milestone, Notification_type, UserMilestone } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationService } from '../notification/notification.service';
+import {
+  MilestoneResponse,
+  UserMilestoneResponse,
+} from './interfaces/milestone.interface';
 
 interface MilestoneCriteria {
   targetValue?: number;
@@ -17,21 +21,23 @@ export class MilestoneService {
     private readonly notificationService: NotificationService,
   ) {}
 
-  async getAllMilestones() {
-    return this.prisma.milestone.findMany({
+  async getAllMilestones(): Promise<MilestoneResponse[]> {
+    const records = await this.prisma.milestone.findMany({
       orderBy: [{ category: 'asc' }, { name: 'asc' }],
     });
+    return records.map((m) => this.mapMilestone(m));
   }
 
-  async getUserMilestones(userId: number) {
-    return this.prisma.userMilestone.findMany({
+  async getUserMilestones(userId: number): Promise<UserMilestoneResponse[]> {
+    const records = await this.prisma.userMilestone.findMany({
       where: { userId: BigInt(userId) },
       include: { milestone: true },
       orderBy: { achievedAt: 'desc' },
     });
+    return records.map((um) => this.mapUserMilestone(um));
   }
 
-  async checkAndAwardMilestones(userId: number) {
+  async checkAndAwardMilestones(userId: number): Promise<MilestoneResponse[]> {
     const [allMilestones, earnedMilestones] = await Promise.all([
       this.prisma.milestone.findMany({ orderBy: { id: 'asc' } }),
       this.prisma.userMilestone.findMany({
@@ -50,7 +56,7 @@ export class MilestoneService {
     }
 
     const stats = await this.fetchUserStats(userId);
-    const newlyAwarded: typeof allMilestones = [];
+    const newlyAwarded: Milestone[] = [];
 
     for (const milestone of unearnedMilestones) {
       const criteria = this.parseCriteria(milestone.criteriaJson);
@@ -103,7 +109,30 @@ export class MilestoneService {
       }
     }
 
-    return newlyAwarded;
+    return newlyAwarded.map((m) => this.mapMilestone(m));
+  }
+
+  private mapMilestone(raw: Milestone): MilestoneResponse {
+    return {
+      id: Number(raw.id),
+      name: raw.name,
+      description: raw.description ?? null,
+      category: raw.category,
+      iconUrl: raw.iconUrl ?? null,
+      createdAt: raw.createdAt,
+    };
+  }
+
+  private mapUserMilestone(
+    raw: UserMilestone & { milestone: Milestone },
+  ): UserMilestoneResponse {
+    return {
+      id: Number(raw.id),
+      userId: Number(raw.userId),
+      milestoneId: Number(raw.milestoneId),
+      achievedAt: raw.achievedAt,
+      milestone: this.mapMilestone(raw.milestone),
+    };
   }
 
   private parseCriteria(criteriaJson: unknown): MilestoneCriteria {
