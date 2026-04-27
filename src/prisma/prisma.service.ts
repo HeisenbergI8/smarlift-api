@@ -26,9 +26,20 @@ export class PrismaService
     const host = parsedUrl.hostname;
     const port = parsedUrl.port || '3306';
     const database = parsedUrl.pathname.replace(/^\//, '') || 'unknown';
+    const sslParam = parsedUrl.searchParams.get('ssl');
+    const sslEnabled = sslParam !== 'false';
 
     super({
-      adapter: new PrismaMariaDb(databaseUrl),
+      adapter: new PrismaMariaDb({
+        host,
+        port: Number(port),
+        user: decodeURIComponent(parsedUrl.username),
+        password: decodeURIComponent(parsedUrl.password),
+        database,
+        ssl: sslEnabled ? { rejectUnauthorized: true } : false,
+        connectTimeout: 30_000,
+        timezone: parsedUrl.searchParams.get('timezone') ?? undefined,
+      }),
     });
 
     this.databaseTarget = `${host}:${port}/${database}`;
